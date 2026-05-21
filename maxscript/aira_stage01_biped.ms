@@ -1043,6 +1043,7 @@ struct AIRAStage01Tool
     fn fitRequests =
     (
         #(
+            #(#vertical, 0, "Root"),
             #(#pelvis, 0, "Pelvis"),
             #(#spine, 1, "Spine"),
             #(#spine, 2, "Chest"),

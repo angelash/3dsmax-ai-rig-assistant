@@ -34,7 +34,7 @@ struct AIRAStage01Tool
     facingAngle = -90.0,
     symmetryTolerance = 2.0,
     minFitTolerance = 2.0,
-    fitToleranceRatio = 0.025,
+    fitToleranceRatio = 0.050,
     guideAlgorithm = "tutorial_centerline_qbird",
     cachedEnvelopePoints = undefined,
     cachedEnvelopeNodeCount = 0,
@@ -1410,6 +1410,248 @@ struct AIRAStage01Tool
         )
     ),
 
+    fn setBipedGuideName bipRoot guideName =
+    (
+        local req = bipedRequestForGuide guideName
+        if req == undefined then false
+        else setBipedNodeToGuide bipRoot req[1] req[2] req[3]
+    ),
+
+    fn fitGuideOrder =
+    (
+        #(
+            "Root", "Pelvis", "Spine", "Chest", "Neck", "Head",
+            "L_Clavicle", "L_Shoulder", "L_Elbow", "L_Wrist",
+            "R_Clavicle", "R_Shoulder", "R_Elbow", "R_Wrist",
+            "L_Hip", "L_Knee", "L_Ankle",
+            "R_Hip", "R_Knee", "R_Ankle",
+            "L_Toe", "R_Toe"
+        )
+    ),
+
+    fn fitBipedGuideOrder bipRoot guideNames =
+    (
+        local count = 0
+        for guideName in guideNames do
+        (
+            if setBipedGuideName bipRoot guideName do count += 1
+        )
+        count
+    ),
+
+    fn fitDiagnostics bipRoot =
+    (
+        local modelNodes = sceneModelNodes()
+        local bounds = getBounds modelNodes
+        local h = guideHeightSpan()
+        if h <= 1.0 do h = defaultHeight
+        local tolerance = h * fitToleranceRatio
+        if tolerance < minFitTolerance do tolerance = minFitTolerance
+        local margin = [h * 0.12, h * 0.20, h * 0.08]
+        local fitFailures = #()
+        local failedGuides = #()
+        local missingSamples = #()
+        local outsideSamples = #()
+        local totalDistance = 0.0
+        local maxDistance = 0.0
+        local sampleCount = 0
+
+        if bipRoot != undefined do
+        (
+            for req in fitRequests() do
+            (
+                local node = getBipedNode bipRoot req[1] req[2]
+                local guide = getGuide req[3]
+                if node == undefined or guide == undefined then
+                (
+                    append missingSamples ((req[3] as string) + " -> " + (req[1] as string) + "[" + (req[2] as string) + "]")
+                    append failedGuides req[3]
+                )
+                else
+                (
+                    local nodePos = getBipedNodePosition node
+                    if nodePos == undefined then
+                    (
+                        append missingSamples ((req[3] as string) + " -> could not read Biped node position")
+                        append failedGuides req[3]
+                    )
+                    else
+                    (
+                        local d = 0.0
+                        try(d = distance nodePos guide.pos)catch(d = 999999.0)
+                        sampleCount += 1
+                        totalDistance += d
+                        if d > maxDistance do maxDistance = d
+                        if d > tolerance do
+                        (
+                            append fitFailures (req[3] + " distance=" + (d as string) + ", tolerance=" + (tolerance as string))
+                            append failedGuides req[3]
+                        )
+                        if bounds != undefined do
+                        (
+                            local mn = bounds[1] - margin
+                            local mx = bounds[2] + margin
+                            if not (nodePos.x >= mn.x and nodePos.x <= mx.x and nodePos.y >= mn.y and nodePos.y <= mx.y and nodePos.z >= mn.z and nodePos.z <= mx.z) do append outsideSamples (node.name + " outside expanded model bounds at " + (nodePos as string))
+                        )
+                    )
+                )
+            )
+        )
+
+        local avgDistance = if sampleCount > 0 then totalDistance / sampleCount else 0.0
+        #(fitFailures, failedGuides, missingSamples, outsideSamples, totalDistance, maxDistance, sampleCount, tolerance, avgDistance)
+    ),
+
+    fn uniqueGuideNames names =
+    (
+        local out = #()
+        for name in names do
+        (
+            if findItem out name == 0 do append out name
+        )
+        out
+    ),
+
+    fn expandFitContext failedGuides =
+    (
+        local out = #()
+        for name in failedGuides do
+        (
+            append out name
+            if name == "Chest" do
+            (
+                append out "Spine"
+                append out "Neck"
+            )
+            if matchPattern name pattern:"L_*" ignoreCase:true do
+            (
+                if matchPattern name pattern:"L_Shoulder" ignoreCase:true or matchPattern name pattern:"L_Elbow" ignoreCase:true or matchPattern name pattern:"L_Wrist" ignoreCase:true do
+                (
+                    append out "L_Clavicle"
+                    append out "L_Wrist"
+                    append out "L_Shoulder"
+                    append out "L_Elbow"
+                )
+                if matchPattern name pattern:"L_Hip" ignoreCase:true or matchPattern name pattern:"L_Knee" ignoreCase:true or matchPattern name pattern:"L_Ankle" ignoreCase:true or matchPattern name pattern:"L_Toe" ignoreCase:true do
+                (
+                    append out "Pelvis"
+                    append out "L_Ankle"
+                    append out "L_Toe"
+                    append out "L_Hip"
+                    append out "L_Knee"
+                )
+            )
+            if matchPattern name pattern:"R_*" ignoreCase:true do
+            (
+                if matchPattern name pattern:"R_Shoulder" ignoreCase:true or matchPattern name pattern:"R_Elbow" ignoreCase:true or matchPattern name pattern:"R_Wrist" ignoreCase:true do
+                (
+                    append out "R_Clavicle"
+                    append out "R_Wrist"
+                    append out "R_Shoulder"
+                    append out "R_Elbow"
+                )
+                if matchPattern name pattern:"R_Hip" ignoreCase:true or matchPattern name pattern:"R_Knee" ignoreCase:true or matchPattern name pattern:"R_Ankle" ignoreCase:true or matchPattern name pattern:"R_Toe" ignoreCase:true do
+                (
+                    append out "Pelvis"
+                    append out "R_Ankle"
+                    append out "R_Toe"
+                    append out "R_Hip"
+                    append out "R_Knee"
+                )
+            )
+        )
+        uniqueGuideNames out
+    ),
+
+    fn orderedFitContext failedGuides =
+    (
+        local context = expandFitContext failedGuides
+        local ordered = #()
+        local fullOrder = fitGuideOrder()
+        for name in fullOrder do
+        (
+            if findItem context name > 0 do append ordered name
+        )
+        if ordered.count == 0 then fullOrder else ordered
+    ),
+
+    fn scaledValue value minValue maxValue =
+    (
+        local out = value
+        if out < minValue do out = minValue
+        if out > maxValue do out = maxValue
+        out
+    ),
+
+    fn scaleBipedSegmentTowardGuides bipRoot startGuideName endGuideName scaleGuideName =
+    (
+        local startNode = bipedNodeForGuide bipRoot startGuideName
+        local endNode = bipedNodeForGuide bipRoot endGuideName
+        local scaleNode = bipedNodeForGuide bipRoot scaleGuideName
+        local startGuide = getGuide startGuideName
+        local endGuide = getGuide endGuideName
+        if startNode == undefined or endNode == undefined or scaleNode == undefined or startGuide == undefined or endGuide == undefined then false
+        else
+        (
+            local startPos = getBipedNodePosition startNode
+            local endPos = getBipedNodePosition endNode
+            if startPos == undefined or endPos == undefined then false
+            else
+            (
+                local currentLength = distance startPos endPos
+                local targetLength = distance startGuide.pos endGuide.pos
+                if currentLength < 0.001 or targetLength < 0.001 then false
+                else
+                (
+                    local ratio = targetLength / currentLength
+                    if ratio < 0.05 do ratio = 0.05
+                    if ratio > 8.0 do ratio = 8.0
+                    if abs(ratio - 1.0) < 0.015 then false
+                    else
+                    (
+                        local currentScale = undefined
+                        try(currentScale = biped.getTransform scaleNode #scale)catch(currentScale = undefined)
+                        if currentScale == undefined do currentScale = [1, 1, 1]
+                        local newScale = [scaledValue (currentScale.x * ratio) 0.05 30.0, currentScale.y, currentScale.z]
+                        local ok = true
+                        try(biped.setTransform scaleNode #scale newScale false)catch(ok = false)
+                        ok
+                    )
+                )
+            )
+        )
+    ),
+
+    fn scaleBipedSegmentsToGuides bipRoot =
+    (
+        local count = 0
+        local segments = #(
+            #("Pelvis", "Spine", "Pelvis"),
+            #("Spine", "Chest", "Spine"),
+            #("Chest", "Neck", "Chest"),
+            #("Neck", "Head", "Neck"),
+            #("L_Clavicle", "L_Shoulder", "L_Clavicle"),
+            #("L_Shoulder", "L_Elbow", "L_Shoulder"),
+            #("L_Elbow", "L_Wrist", "L_Elbow"),
+            #("R_Clavicle", "R_Shoulder", "R_Clavicle"),
+            #("R_Shoulder", "R_Elbow", "R_Shoulder"),
+            #("R_Elbow", "R_Wrist", "R_Elbow"),
+            #("Pelvis", "L_Hip", "Pelvis"),
+            #("L_Hip", "L_Knee", "L_Hip"),
+            #("L_Knee", "L_Ankle", "L_Knee"),
+            #("Pelvis", "R_Hip", "Pelvis"),
+            #("R_Hip", "R_Knee", "R_Hip"),
+            #("R_Knee", "R_Ankle", "R_Knee"),
+            #("L_Ankle", "L_Toe", "L_Ankle"),
+            #("R_Ankle", "R_Toe", "R_Ankle")
+        )
+        for seg in segments do
+        (
+            if scaleBipedSegmentTowardGuides bipRoot seg[1] seg[2] seg[3] do count += 1
+        )
+        count
+    ),
+
     fn guideHeight =
     (
         local h = guideHeightSpan()
@@ -1518,16 +1760,89 @@ struct AIRAStage01Tool
 
         setFigureMode bipRoot true
 
-        local count = 0
-        local requests = fitRequests()
-
-        for req in requests do
-        (
-            if setBipedNodeToGuide bipRoot req[1] req[2] req[3] do count += 1
-        )
+        local count = fitBipedGuideOrder bipRoot (fitGuideOrder())
 
         log ("Fit " + (count as string) + " Biped nodes to guides. Please inspect and fine tune in Figure Mode.")
         true
+    ),
+
+    fn getUserPropStringSafe node propName defaultValue =
+    (
+        local value = undefined
+        try(value = getUserProp node propName)catch(value = undefined)
+        if value == undefined then defaultValue else (value as string)
+    ),
+
+    fn setFitRefineProps bipRoot mode maxIterations iterations initialFailures finalFailures initialMax finalMax converged trace =
+    (
+        try(setUserProp bipRoot "AIRA_FitRefineMode" mode)catch()
+        try(setUserProp bipRoot "AIRA_FitRefineMaxIterations" (maxIterations as string))catch()
+        try(setUserProp bipRoot "AIRA_FitRefineIterations" (iterations as string))catch()
+        try(setUserProp bipRoot "AIRA_FitRefineInitialFailures" (initialFailures as string))catch()
+        try(setUserProp bipRoot "AIRA_FitRefineFinalFailures" (finalFailures as string))catch()
+        try(setUserProp bipRoot "AIRA_FitRefineInitialMaxDistance" (initialMax as string))catch()
+        try(setUserProp bipRoot "AIRA_FitRefineFinalMaxDistance" (finalMax as string))catch()
+        try(setUserProp bipRoot "AIRA_FitRefineConverged" (converged as string))catch()
+        try(setUserProp bipRoot "AIRA_FitRefineTrace" trace)catch()
+    ),
+
+    fn refineBipedToGuides maxIterations =
+    (
+        local bipRoot = findBipedRoot()
+        if bipRoot == undefined then
+        (
+            messageBox "No Biped root found. Create a Biped first." title:"AIRA Stage01"
+            return #(false, 0, 0, 0, 0.0, 0.0, #("no_biped_root"))
+        )
+
+        if maxIterations < 1 do maxIterations = 1
+        setFigureMode bipRoot true
+
+        local initialDiag = fitDiagnostics bipRoot
+        local initialFailures = initialDiag[1].count + initialDiag[3].count + initialDiag[4].count
+        local initialMax = initialDiag[6]
+        local traceItems = #()
+        append traceItems ("iter 0 failures=" + (initialFailures as string) + ", maxDistance=" + (initialMax as string) + ", avgDistance=" + (initialDiag[9] as string))
+
+        local diag = initialDiag
+        local iterations = 0
+        local converged = (initialFailures == 0)
+        local previousMetric = initialFailures * 100000.0 + initialMax
+
+        for i = 1 to maxIterations while not converged do
+        (
+            local failedGuides = diag[2]
+            local order = orderedFitContext failedGuides
+            local scaleCount = scaleBipedSegmentsToGuides bipRoot
+            local fitCount = fitBipedGuideOrder bipRoot order
+            diag = fitDiagnostics bipRoot
+            iterations = i
+
+            local failureCount = diag[1].count + diag[3].count + diag[4].count
+            local maxDistance = diag[6]
+            local metric = failureCount * 100000.0 + maxDistance
+            append traceItems ("iter " + (i as string) + " scaled=" + (scaleCount as string) + ", positioned=" + (fitCount as string) + ", failures=" + (failureCount as string) + ", maxDistance=" + (maxDistance as string) + ", avgDistance=" + (diag[9] as string))
+            converged = (failureCount == 0)
+            if (not converged) and i > 2 and metric >= previousMetric do
+            (
+                -- Stop on a plateau instead of oscillating forever; the Skin gate
+                -- will keep this candidate blocked and report the trace.
+                exit
+            )
+            previousMetric = metric
+        )
+
+        local finalFailures = diag[1].count + diag[3].count + diag[4].count
+        local finalMax = diag[6]
+        local traceText = ""
+        for i = 1 to traceItems.count do
+        (
+            traceText += traceItems[i]
+            if i < traceItems.count do traceText += " | "
+        )
+        setFitRefineProps bipRoot "iterative_evidence_loop" maxIterations iterations initialFailures finalFailures initialMax finalMax converged traceText
+        log ("Biped fit refinement finished: iterations=" + (iterations as string) + ", initialFailures=" + (initialFailures as string) + ", finalFailures=" + (finalFailures as string) + ", converged=" + (converged as string))
+        #(converged, iterations, initialFailures, finalFailures, initialMax, finalMax, traceItems)
     ),
 
     fn requiredGuideNames =
@@ -1929,49 +2244,24 @@ struct AIRAStage01Tool
         local sym = symmetryIssues()
         local order = chainOrderIssues()
         local bipRoot = findBipedRoot()
-        local fitFailures = #()
-        local missingSamples = #()
-        local outsideSamples = #()
-        local totalDistance = 0.0
-        local maxDistance = 0.0
-        local sampleCount = 0
-        local h = guideHeight()
-        local tolerance = h * fitToleranceRatio
-        if tolerance < minFitTolerance do tolerance = minFitTolerance
-        local margin = [h * 0.12, h * 0.20, h * 0.08]
-
-        if bipRoot != undefined do
-        (
-            for req in fitRequests() do
-            (
-                local node = getBipedNode bipRoot req[1] req[2]
-                local guide = getGuide req[3]
-                if node == undefined or guide == undefined then
-                (
-                    append missingSamples ((req[3] as string) + " -> " + (req[1] as string) + "[" + (req[2] as string) + "]")
-                )
-                else
-                (
-                    local nodePos = getBipedNodePosition node
-                    if nodePos == undefined then
-                    (
-                        append missingSamples ((req[3] as string) + " -> could not read Biped node position")
-                    )
-                    else
-                    (
-                    local d = 0.0
-                    try(d = distance nodePos guide.pos)catch(d = 999999.0)
-                    sampleCount += 1
-                    totalDistance += d
-                    if d > maxDistance do maxDistance = d
-                    if d > tolerance do append fitFailures (req[3] + " distance=" + (d as string) + ", tolerance=" + (tolerance as string))
-                    if not (pointInsideExpandedBounds nodePos bounds margin) do append outsideSamples (node.name + " outside expanded model bounds at " + (nodePos as string))
-                    )
-                )
-            )
-        )
-
-        local avgDistance = if sampleCount > 0 then totalDistance / sampleCount else 0.0
+        local diag = if bipRoot != undefined then fitDiagnostics bipRoot else #(#(), #(), #(), #(), 0.0, 0.0, 0, minFitTolerance, 0.0)
+        local fitFailures = diag[1]
+        local missingSamples = diag[3]
+        local outsideSamples = diag[4]
+        local totalDistance = diag[5]
+        local maxDistance = diag[6]
+        local sampleCount = diag[7]
+        local tolerance = diag[8]
+        local avgDistance = diag[9]
+        local refineMode = if bipRoot != undefined then getUserPropStringSafe bipRoot "AIRA_FitRefineMode" "single_pass" else "no_biped"
+        local refineMaxIterations = if bipRoot != undefined then getUserPropStringSafe bipRoot "AIRA_FitRefineMaxIterations" "0" else "0"
+        local refineIterations = if bipRoot != undefined then getUserPropStringSafe bipRoot "AIRA_FitRefineIterations" "0" else "0"
+        local refineInitialFailures = if bipRoot != undefined then getUserPropStringSafe bipRoot "AIRA_FitRefineInitialFailures" "0" else "0"
+        local refineFinalFailures = if bipRoot != undefined then getUserPropStringSafe bipRoot "AIRA_FitRefineFinalFailures" (fitFailures.count as string) else "0"
+        local refineInitialMax = if bipRoot != undefined then getUserPropStringSafe bipRoot "AIRA_FitRefineInitialMaxDistance" "0" else "0"
+        local refineFinalMax = if bipRoot != undefined then getUserPropStringSafe bipRoot "AIRA_FitRefineFinalMaxDistance" (maxDistance as string) else "0"
+        local refineConverged = if bipRoot != undefined then getUserPropStringSafe bipRoot "AIRA_FitRefineConverged" "false" else "false"
+        local refineTrace = if bipRoot != undefined then getUserPropStringSafe bipRoot "AIRA_FitRefineTrace" "" else ""
         local mechanicalScore = 100
         if bipRoot == undefined do mechanicalScore -= 35
         mechanicalScore -= missing.count * 3
@@ -2007,6 +2297,17 @@ struct AIRAStage01Tool
         format "  \"fitSamples\": %, \n" sampleCount to:fp
         format "  \"averageGuideNodeDistance\": %, \n" (jsonNumber avgDistance) to:fp
         format "  \"maxGuideNodeDistance\": %, \n" (jsonNumber maxDistance) to:fp
+        format "  \"fitRefinement\": {\n" to:fp
+        format "    \"mode\": %, \n" (jsonString refineMode) to:fp
+        format "    \"maxIterations\": %, \n" refineMaxIterations to:fp
+        format "    \"iterations\": %, \n" refineIterations to:fp
+        format "    \"initialFailures\": %, \n" refineInitialFailures to:fp
+        format "    \"finalFailures\": %, \n" refineFinalFailures to:fp
+        format "    \"initialMaxDistance\": %, \n" refineInitialMax to:fp
+        format "    \"finalMaxDistance\": %, \n" refineFinalMax to:fp
+        format "    \"converged\": %, \n" (jsonBool (refineConverged == "true" or refineConverged == "True")) to:fp
+        format "    \"trace\": %\n" (jsonString refineTrace) to:fp
+        format "  },\n" to:fp
         format "  \"missingGuides\": %, \n" (jsonStringArray missing) to:fp
         format "  \"symmetryIssues\": %, \n" (jsonStringArray sym) to:fp
         format "  \"missingFitSamples\": %, \n" (jsonStringArray missingSamples) to:fp
@@ -2034,6 +2335,11 @@ struct AIRAStage01Tool
         format "- Fit samples: `%`\n" sampleCount to:fp
         format "- Average guide-node distance: `%`\n" avgDistance to:fp
         format "- Max guide-node distance: `%`\n" maxDistance to:fp
+        format "- Fit refinement mode: `%`\n" refineMode to:fp
+        format "- Fit refinement iterations: `% / %`\n" refineIterations refineMaxIterations to:fp
+        format "- Fit refinement failures: `% -> %`\n" refineInitialFailures refineFinalFailures to:fp
+        format "- Fit refinement converged: `%`\n" refineConverged to:fp
+        if refineTrace != "" do format "- Fit refinement trace: `%`\n" refineTrace to:fp
         format "\n## Mechanical Issues\n\n" to:fp
         if missing.count + sym.count + missingSamples.count + fitFailures.count + outsideSamples.count + order.count == 0 then
         (

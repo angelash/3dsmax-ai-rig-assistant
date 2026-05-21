@@ -11,6 +11,7 @@ Stage01 output is only a Biped candidate until front, side and top wrapping are 
 - `needs_detail`, `uncertain`, `not_visible` and `blocker` are blocking states.
 - Numeric fit diagnostics and generated screenshots are evidence, not approval.
 - VLM output is evidence/signoff input only; the Skin gate still validates the schema and every required check.
+- Biped mechanical fit must converge after the evidence feedback loop, but mechanical convergence alone is not Skin-ready.
 - Skin setup starts only after `semanticSkinReady=true`, `stage01HandoffReady=true`, and the manual/VLM signoff is recorded.
 
 ## Review Standard

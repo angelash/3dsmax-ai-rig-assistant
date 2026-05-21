@@ -93,6 +93,8 @@ F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage01_fbx.ps1 -Source
 
 默认也是唯一允许的 Guide 候选生成器是 `tutorial_centerline_qbird`。旧的 `bbox_humanoid`、`mesh_profile`、`qbird_profile`、`semantic_qbird`、`visual_semantic_qbird`、`tutorial_visual_qbird` 已屏蔽，不能再作为推荐或生产判断入口。
 
+batch 会在创建 Biped 后进入证据反馈循环：每轮读取当前 Biped 节点到 Guide 的偏差，先用 Figure Mode scale 调整 Biped 段长，再按教程层级顺序重新定位；默认最多 `-MaxFitIterations 12` 轮，收敛后才生成最终 Fit QC。机械收敛仍不是 Skin 放行，front/side/top 视觉签核仍是硬门。
+
 关键输出会在 batch 结束后自动整理到 `out/runs/<assetName>__YYYYMMDD_HHMMSS/`。同一个 `assetName` 反复生成时会新建带时间戳的 run 目录，不覆盖旧批次。主要文件包括：
 
 - `luxun_model_stage01_rig_scene.max`：包含按教程原则创建和视觉校准后的 Biped 骨架。

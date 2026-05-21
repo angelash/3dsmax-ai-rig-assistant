@@ -13,6 +13,8 @@ param(
 
     [string]$VlmReviewModel = "",
 
+    [int]$MaxFitIterations = 12,
+
     [string]$OutDir = ""
 )
 
@@ -86,12 +88,14 @@ $oldFbxPath = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_FBX_PATH", "Pr
 $oldAssetName = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_ASSET_NAME", "Process")
 $oldGuideAlgo = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_GUIDE_ALGO", "Process")
 $oldTextureDir = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_TEXTURE_DIR", "Process")
+$oldMaxFitIterations = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_MAX_FIT_ITERATIONS", "Process")
 
 try {
     $env:AIRA_STAGE01_FBX_PATH = $WorkingFbx
     $env:AIRA_STAGE01_ASSET_NAME = $SafeAssetName
     $env:AIRA_STAGE01_GUIDE_ALGO = $GuideAlgorithm
     $env:AIRA_STAGE01_TEXTURE_DIR = $TextureSidecar
+    $env:AIRA_STAGE01_MAX_FIT_ITERATIONS = $MaxFitIterations
 
     & $MaxBatch $BatchScript `
         -v 4 `
@@ -125,6 +129,13 @@ finally {
     }
     else {
         $env:AIRA_STAGE01_TEXTURE_DIR = $oldTextureDir
+    }
+
+    if ($null -eq $oldMaxFitIterations) {
+        Remove-Item Env:AIRA_STAGE01_MAX_FIT_ITERATIONS -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:AIRA_STAGE01_MAX_FIT_ITERATIONS = $oldMaxFitIterations
     }
 }
 
@@ -370,6 +381,7 @@ if ((Test-Path -LiteralPath $SkinPrepGateScript) -and (Test-Path -LiteralPath $O
     textureSidecar = $OrganizedTextureSidecar
     assetName = $SafeAssetName
     guideAlgorithm = $GuideAlgorithm
+    maxFitIterations = $MaxFitIterations
     organized = $Organized
     runDir = $RunDir
     scene = $OrganizedScene

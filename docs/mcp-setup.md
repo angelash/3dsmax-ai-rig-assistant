@@ -162,6 +162,8 @@ visual_screenshots/<asset>/*_top.png
 
 离线流程还会生成 `visual_review/` 证据包：全局前/侧/顶图、head/pelvis/hand/foot 局部裁剪、`review_input.md` 和 `review_schema.json`。这个包用于人工或 VLM 输出结构化 blocker，不产生质量分。有 `OPENAI_API_KEY` 时，batch 会自动调用 VLM 生成 `*_semantic_visual_review_vlm.json`；传 `skip_vlm_review=true` 或 PowerShell 的 `-SkipVlmReview` 可强制跳过，传 `visual_signoff_json` / `-VisualSignoffJson` 可使用外部签核。
 
+Biped 机械拟合不是单次写入。离线流程会按 Fit QC 偏差循环调整：先根据 Guide 段长缩放 Biped，再按教程层级顺序重新定位，直到无 fit failure 或达到 `max_fit_iterations` / `-MaxFitIterations` 上限。未收敛时 Skin gate 会继续阻断。
+
 旧 benchmark 曾写入：
 
 ```text

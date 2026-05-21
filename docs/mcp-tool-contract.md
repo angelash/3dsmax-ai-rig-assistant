@@ -181,13 +181,16 @@
   "guide_algorithm": "tutorial_centerline_qbird",
   "visual_signoff_json": "",
   "skip_vlm_review": false,
-  "vlm_review_model": ""
+  "vlm_review_model": "",
+  "max_fit_iterations": 12
 }
 ```
 
 `guide_algorithm` 只允许 `tutorial_centerline_qbird`。旧算法和分数排序推荐已经屏蔽，不能再通过 MCP 作为生产入口。
 
 `visual_signoff_json` 可传入人工或外部 VLM 已填好的 `review_schema.json` 兼容签核文件；`skip_vlm_review=true` 会跳过自动 VLM 复核；`vlm_review_model` 可覆盖默认视觉模型。未传签核且没有 `OPENAI_API_KEY` 时，Stage01 仍会产出证据包，但 Skin gate 会保持阻断。
+
+`max_fit_iterations` 控制 Biped 机械拟合的证据反馈循环上限。每轮会按 Fit QC 偏差先缩放 Biped 段长再重新定位；收敛记录写入 `fitQcJson.fitRefinement`。
 
 输出：
 
@@ -196,6 +199,7 @@
   "ok": true,
   "runDir": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS",
   "guideAlgorithm": "tutorial_centerline_qbird",
+  "maxFitIterations": 12,
   "workingFbx": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/scene/luxun_model.fbx",
   "textureSidecar": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/scene/luxun_model.fbm",
   "scene": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/scene/luxun_model_stage01_rig_scene.max",

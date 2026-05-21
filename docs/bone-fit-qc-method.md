@@ -56,6 +56,16 @@ Stage01 现在会在生成 Guide 前先做 mesh profile。旧的 `semantic_qbird
 - Biped 节点到 Guide 的距离。
 - Biped 节点是否落在模型扩展包围盒内。
 
+现在这一层不是一次性写入后直接验收，而是证据反馈循环：
+
+- 初次按教程层级顺序把 Biped 写到 Guide。
+- 读取 Fit QC 证据，找出超容差节点和最大偏差。
+- 在 Figure Mode 中按 Guide 段长缩放 Biped 段，再重新定位节点。
+- 重复到 Fit QC 无失败，或达到 `MaxFitIterations` 上限。
+- 如果仍未收敛，Skin gate 保持阻断，并把 `fitRefinement.trace` 写进报告。
+
+Biped 的肩、肘、胯、膝、踝等节点会受 Character Studio Figure Mode 和 IK 约束影响，不能用普通点物体的零误差标准判断；当前机械容差按角色高度 5% 计算，用来拦截明显错误，最终仍要靠 front/side/top 视觉签核确认包裹性。
+
 输出：
 
 - `*_stage01_fit_qc.json`

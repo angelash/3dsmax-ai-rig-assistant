@@ -397,6 +397,7 @@ def analyze(
                 "score": "hidden_diagnostic_only",
                 "sourceProductionReady": biped_fit_qc.get("productionReady"),
                 "decisionUse": "diagnostic_only",
+                "fitRefinement": biped_fit_qc.get("fitRefinement", {}),
             },
             "visual": {
                 "ready": visual_available,

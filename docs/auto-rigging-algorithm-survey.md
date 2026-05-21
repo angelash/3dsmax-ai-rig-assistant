@@ -5,12 +5,13 @@
 ## 当前生产链路
 
 1. 用 `tutorial_centerline_qbird` 生成一套 Stage01 视觉候选。
-2. 生成 front / side / top 视觉截图和 `views/<view>.md` 索引。
-3. 运行 `visual_review_pack.py`，生成全局证据图、头/手/脚/骨盆局部裁剪和结构化审查 schema。
-4. 运行 `rig_detail_review.py`，输出逐骨诊断和 Semantic Skin Review。
-5. 有 `OPENAI_API_KEY` 时自动运行 `vlm_multiview_review.py` 生成结构化多视图签核；也可传入人工签核 JSON。
-6. 运行 `stage01_skin_prep_gate.py`，只根据语义阻塞项、人工/VLM 确认、Skin/权重状态判断交付门。
-7. 旧 JSON 里的 `mechanicalScore`、`visualScore`、`detailScore`、`qualityScore` 等字段只保留为兼容诊断数据，不作为推荐、不显示为结论、不改变 `productionReady`。
+2. 按 Fit QC 偏差循环缩放和重定位 Biped，直到机械拟合收敛或达到上限。
+3. 生成 front / side / top 视觉截图和 `views/<view>.md` 索引。
+4. 运行 `visual_review_pack.py`，生成全局证据图、头/手/脚/骨盆局部裁剪和结构化审查 schema。
+5. 运行 `rig_detail_review.py`，输出逐骨诊断和 Semantic Skin Review。
+6. 有 `OPENAI_API_KEY` 时自动运行 `vlm_multiview_review.py` 生成结构化多视图签核；也可传入人工签核 JSON。
+7. 运行 `stage01_skin_prep_gate.py`，只根据语义阻塞项、人工/VLM 确认、Skin/权重状态判断交付门。
+8. 旧 JSON 里的 `mechanicalScore`、`visualScore`、`detailScore`、`qualityScore` 等字段只保留为兼容诊断数据，不作为推荐、不显示为结论、不改变 `productionReady`。
 
 ## 已屏蔽的本地算法
 

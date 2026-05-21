@@ -176,6 +176,7 @@ def stage01_rig_fbx_file(
     visual_signoff_json: str = "",
     skip_vlm_review: bool = False,
     vlm_review_model: str = "",
+    max_fit_iterations: int = 12,
 ) -> dict[str, Any]:
     """Run offline Stage01 guide, Biped creation, visual review, and Skin-prep gate for a local FBX file."""
 
@@ -204,6 +205,8 @@ def stage01_rig_fbx_file(
         safe_asset_name,
         "-GuideAlgorithm",
         guide_algorithm,
+        "-MaxFitIterations",
+        str(max_fit_iterations),
     ]
     if visual_signoff_json:
         signoff = Path(visual_signoff_json)
@@ -239,6 +242,7 @@ def stage01_rig_fbx_file(
         "sourceFbx": str(source),
         "assetName": output_name,
         "guideAlgorithm": guide_algorithm,
+        "maxFitIterations": max_fit_iterations,
         "scene": str(out_dir / f"{output_name}_stage01_rig_scene.max"),
         "summary": str(out_dir / f"{output_name}_stage01_batch_summary.md"),
         "bodyProfileJson": str(out_dir / f"{output_name}_body_profile.json"),

@@ -461,6 +461,7 @@ fn main =
     local fbxPath = getEnv "AIRA_STAGE01_FBX_PATH" (if doesFileExist asciiFbxPath then asciiFbxPath else @"F:\workspace\github\3dsmax-ai-rig-assistant\source\luxun_model\陆逊模型.fbx")
     local assetName = getEnv "AIRA_STAGE01_ASSET_NAME" (getFilenameFile fbxPath)
     local guideAlgorithm = getEnv "AIRA_STAGE01_GUIDE_ALGO" "tutorial_centerline_qbird"
+    local maxFitIterations = (getEnv "AIRA_STAGE01_MAX_FIT_ITERATIONS" "12") as integer
     local toolPath = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_stage01_biped.ms"
     local assetQcPath = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_asset_qc.ms"
     local reportPath = outDir + @"\" + assetName + @"_stage01_batch_summary.md"
@@ -474,6 +475,7 @@ fn main =
     writeLine fp ""
     writeLine fp ("- FBX: `" + fbxPath + "`")
     writeLine fp ("- Guide algorithm: `" + guideAlgorithm + "`")
+    writeLine fp ("- Max fit refinement iterations: `" + (maxFitIterations as string) + "`")
     writeLine fp ("- Started: `" + (localTime as string) + "`")
 
     if not (doesFileExist fbxPath) then
@@ -523,6 +525,7 @@ fn main =
         local guideCount = AIRA_Stage01.createGuidesFromSelection()
         local mirrorCount = AIRA_Stage01.mirrorLeftGuidesToRight()
         local bip = AIRA_Stage01.createBipedFromGuides()
+        local refineResult = AIRA_Stage01.refineBipedToGuides maxFitIterations
         local bipedName = if bip != undefined then bip.name else ""
 
         saveMaxFile scenePath
@@ -546,6 +549,10 @@ fn main =
         writeLine fp ("- Guides created: `" + (guideCount as string) + "`")
         writeLine fp ("- Guide pairs mirrored: `" + (mirrorCount as string) + "`")
         writeLine fp ("- Biped root: `" + bipedName + "`")
+        writeLine fp ("- Fit refinement converged: `" + (refineResult[1] as string) + "`")
+        writeLine fp ("- Fit refinement iterations: `" + (refineResult[2] as string) + "`")
+        writeLine fp ("- Fit refinement failures: `" + (refineResult[3] as string) + " -> " + (refineResult[4] as string) + "`")
+        writeLine fp ("- Fit refinement max distance: `" + (refineResult[5] as string) + " -> " + (refineResult[6] as string) + "`")
         writeLine fp ("- Stage report: `" + stageReport + "`")
         writeLine fp ("- Fit QC JSON: `" + fitQc[1] + "`")
         writeLine fp ("- Fit QC Markdown: `" + fitQc[2] + "`")

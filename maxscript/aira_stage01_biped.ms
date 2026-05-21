@@ -1111,13 +1111,6 @@ struct AIRAStage01Tool
         undefined
     ),
 
-    fn bipedNodeForGuide bipRoot guideName =
-    (
-        local req = bipedRequestForGuide guideName
-        if bipRoot == undefined or req == undefined then undefined
-        else getBipedNode bipRoot req[1] req[2]
-    ),
-
     fn templateBoneChains =
     (
         #(
@@ -1381,6 +1374,13 @@ struct AIRAStage01Tool
         )
         catch(n = undefined)
         n
+    ),
+
+    fn bipedNodeForGuide bipRoot guideName =
+    (
+        local req = bipedRequestForGuide guideName
+        if bipRoot == undefined or req == undefined then undefined
+        else getBipedNode bipRoot req[1] req[2]
     ),
 
     fn getBipedNodePosition node =

@@ -412,7 +412,6 @@ def run_artifacts(run_dir: Path) -> dict[str, Path | None]:
 def run_signals(artifacts: dict[str, Path | None]) -> dict[str, Any]:
     body_profile = load_json(artifacts["bodyProfileJson"]) if artifacts["bodyProfileJson"] else {}
     fit_qc = load_json(artifacts["bipedFitQcJson"]) if artifacts["bipedFitQcJson"] else {}
-    template_qc = load_json(artifacts["templateFitQcJson"]) if artifacts["templateFitQcJson"] else {}
     visual_qc = load_json(artifacts["visualQcJson"]) if artifacts["visualQcJson"] else {}
     detail_qc = load_json(artifacts["rigDetailReviewJson"]) if artifacts["rigDetailReviewJson"] else {}
     skin_gate = load_json(artifacts["skinPrepGateJson"]) if artifacts["skinPrepGateJson"] else {}
@@ -430,7 +429,7 @@ def run_signals(artifacts: dict[str, Path | None]) -> dict[str, Any]:
         "textureSidecarAvailable": bool(artifacts.get("textureSidecar")),
         "stage01HandoffReady": skin_gate.get("stage01HandoffReady", "n/a"),
         "skinSetupReady": skin_gate.get("skinSetupReady", "n/a"),
-        "productionReady": skin_gate.get("productionReady", template_qc.get("productionReady", "n/a")),
+        "productionReady": skin_gate.get("productionReady", fit_qc.get("productionReady", "n/a")),
         "assetQcIssueCount": len(asset_qc.get("issues", [])) if asset_qc else "n/a",
         "diagnosticScoreFieldsHidden": True,
     }
@@ -792,7 +791,7 @@ def refresh_run_report_paths(run_dir: Path, asset_name: str) -> None:
         qc = load_json(skin_json)
         inputs = {
             "bodyProfileJson": str(artifacts["bodyProfileJson"]) if artifacts.get("bodyProfileJson") else "",
-            "templateQcJson": str(artifacts["templateFitQcJson"]) if artifacts.get("templateFitQcJson") else "",
+            "bipedFitQcJson": str(artifacts["bipedFitQcJson"]) if artifacts.get("bipedFitQcJson") else "",
             "visualQcJson": str(artifacts["visualQcJson"]) if artifacts.get("visualQcJson") else "",
             "rigDetailReviewJson": str(artifacts["rigDetailReviewJson"]) if artifacts.get("rigDetailReviewJson") else "",
             "rigAssetQcJson": str(artifacts["rigAssetQcJson"]) if artifacts.get("rigAssetQcJson") else "",

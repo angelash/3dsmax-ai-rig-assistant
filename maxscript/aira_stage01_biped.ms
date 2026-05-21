@@ -1072,6 +1072,52 @@ struct AIRAStage01Tool
         )
     ),
 
+    fn bipedSnapshotSegments =
+    (
+        #(
+            #("Pelvis", "Spine"),
+            #("Spine", "Chest"),
+            #("Chest", "Neck"),
+            #("Neck", "Head"),
+
+            #("Chest", "L_Clavicle"),
+            #("L_Clavicle", "L_Shoulder"),
+            #("L_Shoulder", "L_Elbow"),
+            #("L_Elbow", "L_Wrist"),
+            #("Chest", "R_Clavicle"),
+            #("R_Clavicle", "R_Shoulder"),
+            #("R_Shoulder", "R_Elbow"),
+            #("R_Elbow", "R_Wrist"),
+
+            #("Pelvis", "L_Hip"),
+            #("L_Hip", "L_Knee"),
+            #("L_Knee", "L_Ankle"),
+            #("L_Ankle", "L_Foot"),
+            #("L_Foot", "L_Toe"),
+            #("Pelvis", "R_Hip"),
+            #("R_Hip", "R_Knee"),
+            #("R_Knee", "R_Ankle"),
+            #("R_Ankle", "R_Foot"),
+            #("R_Foot", "R_Toe")
+        )
+    ),
+
+    fn bipedRequestForGuide guideName =
+    (
+        for req in fitRequests() do
+        (
+            if req[3] == guideName do return req
+        )
+        undefined
+    ),
+
+    fn bipedNodeForGuide bipRoot guideName =
+    (
+        local req = bipedRequestForGuide guideName
+        if bipRoot == undefined or req == undefined then undefined
+        else getBipedNode bipRoot req[1] req[2]
+    ),
+
     fn templateBoneChains =
     (
         #(
@@ -1307,18 +1353,9 @@ struct AIRAStage01Tool
 
     fn createTemplateSkeletonFromGuides =
     (
-        deleteTemplateSkeleton()
-        local chains = templateBoneChains()
-        local rootChainCount = createTemplateBoneChain chains[1] undefined
-        local chestParent = getNodeByName (templateBoneName "Spine" "Chest")
-        local pelvisParent = getNodeByName (templateBoneName "Pelvis" "Spine")
-        local count = rootChainCount
-        count += createTemplateBoneChain chains[2] chestParent
-        count += createTemplateBoneChain chains[3] chestParent
-        count += createTemplateBoneChain chains[4] pelvisParent
-        count += createTemplateBoneChain chains[5] pelvisParent
-        log ("Created " + (count as string) + " template bones from guides.")
-        count
+        local deleted = deleteTemplateSkeleton()
+        log ("Template skeleton generation is disabled. Stage01 is Biped-only; deleted old AIRA_BONE nodes: " + (deleted as string))
+        0
     ),
 
     fn setFigureMode bipRoot state =
@@ -1735,7 +1772,7 @@ struct AIRAStage01Tool
 
         local pts = collectWorldMeshPoints nodes
         local names = requiredGuideNames()
-        local segments = templateBoneSegments()
+        local segments = bipedSnapshotSegments()
         local bipRoot = findBipedRoot()
 
         local fp = createFile jsonPath
@@ -1768,29 +1805,49 @@ struct AIRAStage01Tool
         )
         format "  },\n" to:fp
 
-        format "  \"templateBones\": [\n" to:fp
+        format "  \"bipedNodes\": {\n" to:fp
+        local requests = fitRequests()
+        for i = 1 to requests.count do
+        (
+            local req = requests[i]
+            local node = getBipedNode bipRoot req[1] req[2]
+            local nodePos = undefined
+            if node != undefined do nodePos = getBipedNodePosition node
+            format "    %: " (jsonString req[3]) to:fp
+            if nodePos == undefined then format "null" to:fp else format "%" (jsonPoint nodePos) to:fp
+            if i < requests.count then format ",\n" to:fp else format "\n" to:fp
+        )
+        format "  },\n" to:fp
+
+        format "  \"bipedBones\": [\n" to:fp
         for i = 1 to segments.count do
         (
             local seg = segments[i]
-            local bone = getNodeByName (templateBoneName seg[1] seg[2])
-            local startGuide = getGuide seg[1]
-            local endGuide = getGuide seg[2]
-            local startPoint = if startGuide != undefined then jsonPoint startGuide.pos else "null"
-            local endPoint = if endGuide != undefined then jsonPoint endGuide.pos else "null"
+            local startNode = bipedNodeForGuide bipRoot seg[1]
+            local endNode = bipedNodeForGuide bipRoot seg[2]
+            local startPos = if startNode != undefined then getBipedNodePosition startNode else undefined
+            local endPos = if endNode != undefined then getBipedNodePosition endNode else undefined
+            local startPoint = if startPos != undefined then jsonPoint startPos else "null"
+            local endPoint = if endPos != undefined then jsonPoint endPos else "null"
             local boneLength = 0.0
             local boneWidth = 0.0
             local boneHeight = 0.0
-            if bone != undefined do
+            if (startPos != undefined and endPos != undefined) do
             (
-                try(boneLength = bone.length)catch(boneLength = 0.0)
-                try(boneWidth = bone.width)catch(boneWidth = 0.0)
-                try(boneHeight = bone.height)catch(boneHeight = 0.0)
+                try(boneLength = distance startPos endPos)catch(boneLength = 0.0)
+                local thickness = templateBoneThickness seg[1] seg[2] boneLength
+                boneWidth = thickness
+                boneHeight = thickness
             )
-            format "    {\"name\": %, \"start\": %, \"end\": %, \"role\": %, \"skinPolicy\": %, \"exists\": %, \"startPosition\": %, \"endPosition\": %, \"boneLength\": %, \"boneWidth\": %, \"boneHeight\": %}" \
-                (jsonString (templateBoneName seg[1] seg[2])) (jsonString seg[1]) (jsonString seg[2]) (jsonString (templateBoneRole seg[1] seg[2])) (jsonString (templateBoneSkinPolicy seg[1] seg[2])) (jsonBool (bone != undefined)) startPoint endPoint (jsonNumber boneLength) (jsonNumber boneWidth) (jsonNumber boneHeight) to:fp
+            local boneName = "Biped_" + seg[1] + "_" + seg[2]
+            if (startNode != undefined and endNode != undefined) do boneName = startNode.name + "_to_" + endNode.name
+            format "    {\"name\": %, \"start\": %, \"end\": %, \"role\": %, \"skinPolicy\": %, \"exists\": %, \"startNode\": %, \"endNode\": %, \"startPosition\": %, \"endPosition\": %, \"boneLength\": %, \"boneWidth\": %, \"boneHeight\": %}" \
+                (jsonString boneName) (jsonString seg[1]) (jsonString seg[2]) (jsonString (templateBoneRole seg[1] seg[2])) (jsonString "biped_deforming_candidate") (jsonBool ((startNode != undefined) and (endNode != undefined))) (jsonString (if startNode != undefined then startNode.name else "")) (jsonString (if endNode != undefined then endNode.name else "")) startPoint endPoint (jsonNumber boneLength) (jsonNumber boneWidth) (jsonNumber boneHeight) to:fp
             if i < segments.count then format ",\n" to:fp else format "\n" to:fp
         )
         format "  ],\n" to:fp
+
+        format "  \"templateBones\": [],\n" to:fp
 
         format "  \"bipedRoot\": %, \n" (jsonString (if bipRoot != undefined then bipRoot.name else "")) to:fp
         format "  \"visualMode\": %\n" (jsonString "local_silhouette_projection") to:fp
@@ -2004,139 +2061,8 @@ struct AIRAStage01Tool
 
     fn generateTemplateSkeletonQualityReport assetName =
     (
-        local base = outputBasePath()
-        local jsonPath = base + "\\" + assetName + "_template_skeleton_fit_qc.json"
-        local mdPath = base + "\\" + assetName + "_template_skeleton_fit_qc.md"
-        local segments = templateBoneSegments()
-        local missingBones = #()
-        local missingGuides = #()
-        local startFailures = #()
-        local lengthFailures = #()
-        local totalStartDistance = 0.0
-        local maxStartDistance = 0.0
-        local totalLengthError = 0.0
-        local maxLengthError = 0.0
-        local sampleCount = 0
-        local h = guideHeight()
-        local tolerance = h * fitToleranceRatio
-        if tolerance < minFitTolerance do tolerance = minFitTolerance
-
-        for seg in segments do
-        (
-            local startGuide = getGuide seg[1]
-            local endGuide = getGuide seg[2]
-            local bone = getNodeByName (templateBoneName seg[1] seg[2])
-            if startGuide == undefined or endGuide == undefined then
-            (
-                append missingGuides (seg[1] + " -> " + seg[2])
-            )
-            else if bone == undefined then
-            (
-                append missingBones (templateBoneName seg[1] seg[2])
-            )
-            else
-            (
-                local startDistance = 0.0
-                local guideLength = distance startGuide.pos endGuide.pos
-                local boneLength = 0.0
-                try(startDistance = distance bone.pos startGuide.pos)catch(startDistance = 999999.0)
-                try(boneLength = bone.length)catch(boneLength = 0.0)
-                local lengthError = abs(boneLength - guideLength)
-
-                sampleCount += 1
-                totalStartDistance += startDistance
-                totalLengthError += lengthError
-                if startDistance > maxStartDistance do maxStartDistance = startDistance
-                if lengthError > maxLengthError do maxLengthError = lengthError
-                if startDistance > tolerance do append startFailures ((templateBoneName seg[1] seg[2]) + " start distance=" + (startDistance as string))
-                if lengthError > tolerance do append lengthFailures ((templateBoneName seg[1] seg[2]) + " length error=" + (lengthError as string))
-            )
-        )
-
-        local order = chainOrderIssues()
-        local sym = symmetryIssues()
-        local avgStartDistance = if sampleCount > 0 then totalStartDistance / sampleCount else 0.0
-        local avgLengthError = if sampleCount > 0 then totalLengthError / sampleCount else 0.0
-        local mechanicalScore = 100
-        mechanicalScore -= missingGuides.count * 4
-        mechanicalScore -= missingBones.count * 4
-        mechanicalScore -= startFailures.count * 3
-        mechanicalScore -= lengthFailures.count * 3
-        mechanicalScore -= order.count * 4
-        mechanicalScore -= sym.count * 4
-        if mechanicalScore < 0 do mechanicalScore = 0
-
-        local mechanicalReady = (mechanicalScore >= 90 and missingGuides.count == 0 and missingBones.count == 0 and startFailures.count == 0 and lengthFailures.count == 0 and order.count == 0 and sym.count == 0)
-        local decisionPolicy = "visual_semantic_gate_only"
-        local scorePolicy = "scores_disabled_for_decision_diagnostic_only"
-        local productionReady = false
-        local semanticConfidence = "low"
-        local semanticWarning = "Template bones exactly follow current visual candidate guides. Use manual landmark review or a vision/landmark step before skinning."
-
-        local fp = createFile jsonPath
-        format "{\n" to:fp
-        format "  \"assetName\": %, \n" (jsonString assetName) to:fp
-        format "  \"scene\": %, \n" (jsonString (maxFilePath + maxFileName)) to:fp
-        format "  \"generatedAt\": %, \n" (jsonString (localTime as string)) to:fp
-        format "  \"templateBoneCountExpected\": %, \n" segments.count to:fp
-        format "  \"templateBoneSamples\": %, \n" sampleCount to:fp
-        format "  \"decisionPolicy\": %, \n" (jsonString decisionPolicy) to:fp
-        format "  \"scorePolicy\": %, \n" (jsonString scorePolicy) to:fp
-        format "  \"mechanicalScore\": %, \n" mechanicalScore to:fp
-        format "  \"mechanicalReady\": %, \n" (jsonBool mechanicalReady) to:fp
-        format "  \"productionReady\": %, \n" (jsonBool productionReady) to:fp
-        format "  \"semanticConfidence\": %, \n" (jsonString semanticConfidence) to:fp
-        format "  \"fitTolerance\": %, \n" (jsonNumber tolerance) to:fp
-        format "  \"averageStartDistance\": %, \n" (jsonNumber avgStartDistance) to:fp
-        format "  \"maxStartDistance\": %, \n" (jsonNumber maxStartDistance) to:fp
-        format "  \"averageLengthError\": %, \n" (jsonNumber avgLengthError) to:fp
-        format "  \"maxLengthError\": %, \n" (jsonNumber maxLengthError) to:fp
-        format "  \"missingGuides\": %, \n" (jsonStringArray missingGuides) to:fp
-        format "  \"missingBones\": %, \n" (jsonStringArray missingBones) to:fp
-        format "  \"startFailures\": %, \n" (jsonStringArray startFailures) to:fp
-        format "  \"lengthFailures\": %, \n" (jsonStringArray lengthFailures) to:fp
-        format "  \"symmetryIssues\": %, \n" (jsonStringArray sym) to:fp
-        format "  \"chainOrderIssues\": %, \n" (jsonStringArray order) to:fp
-        format "  \"semanticWarning\": %\n" (jsonString semanticWarning) to:fp
-        format "}\n" to:fp
-        close fp
-
-        fp = createFile mdPath
-        format "# Template Skeleton Fit QC: %\n\n" assetName to:fp
-        format "- Scene: `%`\n" (maxFilePath + maxFileName) to:fp
-        format "- Generated: `%`\n" localTime to:fp
-        format "- Expected template bones: `%`\n" segments.count to:fp
-        format "- Checked template bones: `%`\n" sampleCount to:fp
-        format "- Decision policy: `%`\n" decisionPolicy to:fp
-        format "- Score policy: `%`\n" scorePolicy to:fp
-        format "- Legacy mechanical rating field: `hidden_diagnostic_only`\n" to:fp
-        format "- Mechanical ready: `%`\n" mechanicalReady to:fp
-        format "- Production ready: `%`\n" productionReady to:fp
-        format "- Semantic confidence: `%`\n" semanticConfidence to:fp
-        format "- Fit tolerance: `%`\n" tolerance to:fp
-        format "- Average start distance: `%`\n" avgStartDistance to:fp
-        format "- Max start distance: `%`\n" maxStartDistance to:fp
-        format "- Average length error: `%`\n" avgLengthError to:fp
-        format "- Max length error: `%`\n" maxLengthError to:fp
-        format "\n## Mechanical Issues\n\n" to:fp
-        if missingGuides.count + missingBones.count + startFailures.count + lengthFailures.count + sym.count + order.count == 0 then
-        (
-            format "- None\n" to:fp
-        )
-        else
-        (
-            for item in missingGuides do format "- Missing guide: %\n" item to:fp
-            for item in missingBones do format "- Missing bone: %\n" item to:fp
-            for item in startFailures do format "- Start position: %\n" item to:fp
-            for item in lengthFailures do format "- Length: %\n" item to:fp
-            for item in sym do format "- Symmetry: %\n" item to:fp
-            for item in order do format "- Chain order: %\n" item to:fp
-        )
-        format "\n## Semantic Gate\n\n" to:fp
-        format "- %\n" semanticWarning to:fp
-        close fp
-
-        #(jsonPath, mdPath, mechanicalScore, mechanicalReady, productionReady)
+        log "Template skeleton QC is disabled. Stage01 validates the fitted Biped only."
+        #("", "", 0, false, false)
     ),
 
     fn reportPath =

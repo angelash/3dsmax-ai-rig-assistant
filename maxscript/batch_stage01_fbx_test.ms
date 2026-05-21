@@ -282,21 +282,23 @@ fn createBoneRenderSplines =
     local mat = makeSelfLitMaterial "AIRA_TECH_BONE_MAT" (color 255 168 28)
     if AIRA_Stage01 != undefined do
     (
-        local segments = AIRA_Stage01.templateBoneSegments()
+        local bipRoot = AIRA_Stage01.findBipedRoot()
+        local segments = AIRA_Stage01.bipedSnapshotSegments()
         for seg in segments do
         (
-            local startGuide = AIRA_Stage01.getGuide seg[1]
-            local endGuide = AIRA_Stage01.getGuide seg[2]
-            local boneNode = getNodeByName (AIRA_Stage01.templateBoneName seg[1] seg[2])
-            if startGuide != undefined and endGuide != undefined do
+            local startNode = AIRA_Stage01.bipedNodeForGuide bipRoot seg[1]
+            local endNode = AIRA_Stage01.bipedNodeForGuide bipRoot seg[2]
+            local startPos = if startNode != undefined then AIRA_Stage01.getBipedNodePosition startNode else undefined
+            local endPos = if endNode != undefined then AIRA_Stage01.getBipedNodePosition endNode else undefined
+            if (startPos != undefined and endPos != undefined) do
             (
                 local shape = splineShape name:("AIRA_RENDER_BONE_" + seg[1] + "_" + seg[2])
                 try(addNewSpline shape)catch()
-                try(addKnot shape 1 #corner #line startGuide.pos)catch()
-                try(addKnot shape 1 #corner #line endGuide.pos)catch()
+                try(addKnot shape 1 #corner #line startPos)catch()
+                try(addKnot shape 1 #corner #line endPos)catch()
                 try(updateShape shape)catch()
                 local thickness = 1.0
-                if boneNode != undefined do try(thickness = boneNode.width * 0.28)catch(thickness = 1.0)
+                try(thickness = (AIRA_Stage01.templateBoneThickness seg[1] seg[2] (distance startPos endPos)) * 0.28)catch(thickness = 1.0)
                 if thickness < 0.45 do thickness = 0.45
                 if thickness > 5.0 do thickness = 5.0
                 try(shape.render_renderable = true)catch()
@@ -526,8 +528,7 @@ fn main =
         saveMaxFile scenePath
         local stageReport = AIRA_Stage01.generateReport()
         local fitQc = AIRA_Stage01.generateFitQualityReport assetName
-        local templateBoneCount = AIRA_Stage01.createTemplateSkeletonFromGuides()
-        local templateFitQc = AIRA_Stage01.generateTemplateSkeletonQualityReport assetName
+        AIRA_Stage01.deleteTemplateSkeleton()
         local visualSnapshot = AIRA_Stage01.writeVisualSnapshotReport assetName
 
         fileIn assetQcPath
@@ -550,12 +551,7 @@ fn main =
         writeLine fp ("- Fit QC Markdown: `" + fitQc[2] + "`")
         writeLine fp "- Fit QC legacy rating fields: `hidden_diagnostic_only`"
         writeLine fp ("- Fit QC production ready: `" + (fitQc[4] as string) + "`")
-        writeLine fp ("- Template bones created: `" + (templateBoneCount as string) + "`")
-        writeLine fp ("- Template skeleton QC JSON: `" + templateFitQc[1] + "`")
-        writeLine fp ("- Template skeleton QC Markdown: `" + templateFitQc[2] + "`")
-        writeLine fp "- Template skeleton legacy rating fields: `hidden_diagnostic_only`"
-        writeLine fp ("- Template skeleton mechanical ready: `" + (templateFitQc[4] as string) + "`")
-        writeLine fp ("- Template skeleton production ready: `" + (templateFitQc[5] as string) + "`")
+        writeLine fp "- Skeleton policy: `biped_only_no_template_bones`"
         writeLine fp ("- Visual snapshot JSON: `" + visualSnapshot[1] + "`")
         writeLine fp ("- Visual snapshot sampled points: `" + (visualSnapshot[2] as string) + "`")
         writeLine fp ("- Rig asset QC JSON: `" + rigAssetQc[1] + "`")

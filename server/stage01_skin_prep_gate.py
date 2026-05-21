@@ -44,7 +44,7 @@ def analyze(
     *,
     asset_name: str,
     body_profile: dict[str, Any],
-    template_qc: dict[str, Any],
+    biped_fit_qc: dict[str, Any],
     visual_qc: dict[str, Any],
     rig_detail: dict[str, Any],
     rig_asset_qc: dict[str, Any],
@@ -55,7 +55,14 @@ def analyze(
     transform = rig_asset_qc.get("transform", {})
     materials = rig_asset_qc.get("materials", {})
 
-    template_available = bool(template_qc) and not template_qc.get("missingGuides") and not template_qc.get("missingBones")
+    biped_output_available = bool(biped_fit_qc) and biped_fit_qc.get("bipedFound") is True
+    biped_fit_ready = (
+        biped_output_available
+        and not biped_fit_qc.get("missingGuides")
+        and not biped_fit_qc.get("missingFitSamples")
+        and not biped_fit_qc.get("fitFailures")
+        and not biped_fit_qc.get("outsideBoundsSamples")
+    )
     visual_available = bool(visual_qc) and bool(visual_qc.get("screenshots") or visual_qc.get("visualMode"))
     detail_available = bool(rig_detail) and bool(rig_detail.get("semanticSkinReview") or rig_detail.get("boneReviews"))
     semantic_skin_review = rig_detail.get("semanticSkinReview", {})
@@ -72,15 +79,26 @@ def analyze(
         and number(skeleton.get("verticesChecked")) > 0
     )
 
-    stage01_candidate_available = template_available and visual_available and detail_available
-    stage01_mechanical_handoff_ready = False
-    stage01_handoff_ready = stage01_candidate_available and semantic_skin_ready and manual_semantic_confirmed
+    stage01_candidate_available = biped_output_available and visual_available and detail_available
+    stage01_mechanical_handoff_ready = biped_fit_ready
+    stage01_handoff_ready = (
+        stage01_candidate_available
+        and stage01_mechanical_handoff_ready
+        and semantic_skin_ready
+        and manual_semantic_confirmed
+    )
     skin_setup_ready = stage01_handoff_ready and manual_semantic_confirmed
     production_ready = skin_setup_ready and skin_weights_complete and skin_influence_ready
 
     blockers: list[dict[str, str]] = []
     if not stage01_candidate_available:
-        add_blocker(blockers, "stage01_candidate_outputs_missing", "Required visual candidate outputs are missing: template skeleton data, screenshots/visual QC, or semantic review.")
+        add_blocker(blockers, "stage01_candidate_outputs_missing", "Required Biped candidate outputs are missing: Biped fit QC, screenshots/visual QC, or semantic review.")
+    elif not biped_fit_ready:
+        add_blocker(
+            blockers,
+            "biped_fit_requires_correction",
+            "Biped exists, but fit diagnostics still report missing samples, guide distance failures, or nodes outside the model bounds.",
+        )
     for risk in semantic_skin_blockers:
         add_blocker(
             blockers,
@@ -137,17 +155,17 @@ def analyze(
         {
             "id": "confirm_body_center_chain",
             "status": "done" if manual_semantic_confirmed else "required",
-            "check": "Confirm Root/COM and Pelvis sit at the visual waist/center of mass; Spine, Chest, Neck, Head and HeadTop follow the body/head volume.",
+            "check": "Confirm Biped COM/Pelvis sit at the visual waist/center of mass; Biped Spine, Chest, Neck and Head follow the body/head volume.",
         },
         {
             "id": "confirm_root_deformer_policy",
             "status": "done" if manual_semantic_confirmed else "required",
-            "check": "Confirm Root/COM is a control-only waist origin and no Root->Pelvis or accessory reference bone is included as a Skin influence.",
+            "check": "Confirm Biped COM is control-only and body deformation starts from Biped Pelvis in Skin.",
         },
         {
             "id": "confirm_headtop_vs_crest",
             "status": "done" if manual_semantic_confirmed else "required",
-            "check": "Confirm HeadTop is skull/helmet volume and CrestTop is only a non-deforming crest/headwear reference.",
+            "check": "Confirm the Biped Head is aligned to skull/helmet volume; HeadTop/CrestTop guides are visual references only unless the Biped structure is explicitly extended.",
         },
         {
             "id": "confirm_leg_and_foot_pivots",
@@ -162,15 +180,20 @@ def analyze(
         {
             "id": "confirm_deferred_details",
             "status": "done" if manual_semantic_confirmed else "required",
-            "check": "Confirm whether beak, cloth, weapon, wing, claw or finger detail bones must be added before Skin; hat/crest stays non-deforming unless explicitly rigged.",
+            "check": "Confirm whether beak, cloth, weapon, wing, claw or finger details require Biped structure/options before Skin; do not add ordinary Bones to the body flow.",
         },
     ]
 
     skin_tasks = [
         {
-            "id": "use_template_skeleton",
+            "id": "use_biped_skeleton",
             "status": status(stage01_candidate_available),
-            "note": "Use AIRA_BONE_* only after visual semantic blockers are resolved; Biped remains tutorial/reference only.",
+            "note": "Use the fitted Biped as the only skeleton; visual guides are calibration targets, not a second bone system.",
+        },
+        {
+            "id": "correct_biped_fit",
+            "status": status(biped_fit_ready),
+            "note": "Continue visual/Figure Mode calibration until Biped fit QC has no missing samples, distance failures, or outside-bounds nodes.",
         },
         {
             "id": "manual_landmark_signoff",
@@ -180,7 +203,7 @@ def analyze(
         {
             "id": "resolve_semantic_skin_blockers",
             "status": status(semantic_skin_ready),
-            "note": "Waist Root/COM policy, HeadTop skull vs CrestTop accessory split, hand tip detail and Heel/Foot/Toe depth chain must be represented before Skin.",
+            "note": "Biped COM/Pelvis policy, head/crest visual split, hand detail and foot/toe pivots must be signed off before Skin.",
         },
         {
             "id": "add_skin_modifier",
@@ -188,9 +211,9 @@ def analyze(
             "note": "Add Skin to the character mesh only after manual semantic signoff.",
         },
         {
-            "id": "add_template_bones_to_skin",
+            "id": "add_biped_bones_to_skin",
             "status": status(has_skin, pending=skin_setup_ready and not has_skin),
-            "note": "Add all required AIRA_BONE_* nodes; defer Biped nodes unless the project explicitly wants Biped Skin bones.",
+            "note": "Add the required Biped nodes to Skin; do not add AIRA_BONE_* or other generated template bones.",
         },
         {
             "id": "initial_weight_pass",
@@ -220,10 +243,11 @@ def analyze(
         "manualSemanticConfirmed": manual_semantic_confirmed,
         "skinWeightsComplete": skin_weights_complete,
         "readiness": {
-            "templateMechanical": {
-                "ready": template_available,
+            "bipedFit": {
+                "ready": biped_fit_ready,
+                "available": biped_output_available,
                 "score": "hidden_diagnostic_only",
-                "sourceProductionReady": template_qc.get("productionReady"),
+                "sourceProductionReady": biped_fit_qc.get("productionReady"),
                 "decisionUse": "diagnostic_only",
             },
             "visual": {
@@ -257,7 +281,9 @@ def analyze(
         "productionBlockers": blockers,
         "prepWarnings": prep_warnings,
         "decision": (
-            "Visual candidate exists, but semantic Skin blockers must be resolved before Skin setup."
+            "Biped candidate exists, but Biped fit diagnostics must be corrected before Skin setup."
+            if stage01_candidate_available and not stage01_mechanical_handoff_ready
+            else "Visual candidate exists, but semantic Skin blockers must be resolved before Skin setup."
             if stage01_candidate_available and not semantic_skin_ready
             else "Visual candidate exists and has no semantic blockers; human visual signoff is still required before Skin setup."
             if stage01_candidate_available and semantic_skin_ready and not manual_semantic_confirmed
@@ -299,8 +325,12 @@ def write_markdown(qc: dict[str, Any], inputs: dict[str, str], md_path: Path) ->
         "| --- | --- | --- | --- |",
     ]
     readiness = qc["readiness"]
+    biped_fit = readiness.get("bipedFit") or readiness.get("templateMechanical") or {
+        "ready": False,
+        "decisionUse": "diagnostic_only",
+    }
     lines.append(
-        f"| Template skeleton output | `{readiness['templateMechanical']['ready']}` | `score_hidden` | `{readiness['templateMechanical']['decisionUse']}` |"
+        f"| Biped fit output | `{biped_fit['ready']}` | `score_hidden` | `{biped_fit['decisionUse']}` |"
     )
     lines.append(
         f"| Visual screenshots / QC output | `{readiness['visual']['ready']}` | `score_hidden` | `{readiness['visual']['decisionUse']}` |"
@@ -363,7 +393,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Summarize Stage01 QC into a Skin-prep gate report.")
     parser.add_argument("--asset-name", default="")
     parser.add_argument("--body-profile-json", default="")
-    parser.add_argument("--template-qc-json", default="")
+    parser.add_argument("--biped-fit-qc-json", default="")
+    parser.add_argument("--template-qc-json", default="", help="Deprecated compatibility alias for old reports.")
     parser.add_argument("--visual-qc-json", default="")
     parser.add_argument("--rig-detail-review-json", default="")
     parser.add_argument("--rig-asset-qc-json", default="")
@@ -373,26 +404,27 @@ def main() -> int:
     args = parser.parse_args()
 
     body_profile = load_json(args.body_profile_json)
-    template_qc = load_json(args.template_qc_json)
+    biped_fit_qc_path = args.biped_fit_qc_json or args.template_qc_json
+    biped_fit_qc = load_json(biped_fit_qc_path)
     visual_qc = load_json(args.visual_qc_json)
     rig_detail = load_json(args.rig_detail_review_json)
     rig_asset_qc = load_json(args.rig_asset_qc_json)
 
     asset_name = (
         args.asset_name
-        or template_qc.get("assetName")
+        or biped_fit_qc.get("assetName")
         or visual_qc.get("assetName")
         or rig_detail.get("assetName")
         or body_profile.get("assetName")
         or "stage01_asset"
     )
-    out_dir = Path(args.out_dir) if args.out_dir else Path(args.template_qc_json).parent
+    out_dir = Path(args.out_dir) if args.out_dir else Path(biped_fit_qc_path).parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
     qc = analyze(
         asset_name=asset_name,
         body_profile=body_profile,
-        template_qc=template_qc,
+        biped_fit_qc=biped_fit_qc,
         visual_qc=visual_qc,
         rig_detail=rig_detail,
         rig_asset_qc=rig_asset_qc,
@@ -401,7 +433,7 @@ def main() -> int:
     )
     inputs = {
         "bodyProfileJson": args.body_profile_json,
-        "templateQcJson": args.template_qc_json,
+        "bipedFitQcJson": biped_fit_qc_path,
         "visualQcJson": args.visual_qc_json,
         "rigDetailReviewJson": args.rig_detail_review_json,
         "rigAssetQcJson": args.rig_asset_qc_json,

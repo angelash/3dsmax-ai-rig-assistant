@@ -76,7 +76,6 @@ SLICE_SEGMENTS = [
     ("Spine", "Chest"),
     ("Chest", "Neck"),
     ("Neck", "Head"),
-    ("Head", "HeadTop"),
     ("L_Hip", "L_Knee"),
     ("L_Knee", "L_Ankle"),
     ("L_Foot", "L_Toe"),
@@ -475,6 +474,13 @@ def detect_belt_texture_band(image: RgbImage, fg: tuple[int, int, int, int]) -> 
     }
 
 
+def skeleton_bones(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    biped_bones = snapshot.get("bipedBones")
+    if isinstance(biped_bones, list) and biped_bones:
+        return biped_bones
+    return snapshot.get("templateBones", [])
+
+
 def draw_guides_on_rgb(
     image: RgbImage,
     snapshot: dict[str, Any],
@@ -486,7 +492,7 @@ def draw_guides_on_rgb(
 ) -> None:
     highlight = set(highlight_guides or [])
     if draw_all_bones:
-        for bone in snapshot.get("templateBones", []):
+        for bone in skeleton_bones(snapshot):
             start = bone.get("startPosition")
             end = bone.get("endPosition")
             if start is None or end is None:
@@ -637,7 +643,7 @@ def vec_norm(v: Point3) -> Point3:
 def bone_lookup(snapshot: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
     return {
         (bone.get("start", ""), bone.get("end", "")): bone
-        for bone in snapshot.get("templateBones", [])
+        for bone in skeleton_bones(snapshot)
     }
 
 
@@ -794,7 +800,7 @@ def draw_evidence_view(
         if visible_pixel(x, y, width, height):
             canvas.point(x, y, (184, 184, 184), 1)
 
-    for bone in snapshot.get("templateBones", []):
+    for bone in skeleton_bones(snapshot):
         start = bone.get("startPosition")
         end = bone.get("endPosition")
         if start is None or end is None:
@@ -1059,20 +1065,20 @@ def write_landmark_reasoning(
     if belt:
         lines += [
             "",
-            "### 腰/Root/Pelvis",
+            "### 腰/Biped COM/Pelvis",
             "",
             f"- 腰带贴图搜索区：`{belt.get('roi')}`",
             f"- 候选像素数量：`{belt.get('candidateCount')}`",
             f"- 候选腰带加权中心行：`{belt.get('centroidY')}`",
             f"- 低腰目标行（候选下分位）：`{belt.get('centerY')}`",
-            "- 解释：前视贴图语义图只负责说明低腰目标来自哪里；Root/Pelvis 是否采用了这个位置，要看 `texture_wire_compare_front` 右侧或 `wire_bone_front`。",
+            "- 解释：前视贴图语义图只负责说明低腰目标来自哪里；Biped COM/Pelvis 是否采用了这个位置，要看 `texture_wire_compare_front` 右侧或 `wire_bone_front`。",
         ]
     lines += [
         "",
         "### 头部与外部挂件",
         "",
         "- HeadTop 仍表示脱帽后的头壳/头盔体积上端，CrestTop 只作为非变形外部装饰参考。",
-        "- 侧视配对图用右侧 wire+bones 检查 Neck/Head/HeadTop 是否落在脱帽后的头壳/头盔体积内，避免骨骼继续追到高位羽饰。",
+        "- 侧视配对图用右侧 wire+bones 检查 Biped Neck/Head 是否落在脱帽后的头壳/头盔体积内，再用 HeadTop guide 确认没有追到高位羽饰。",
         "",
         "### 脚部",
         "",
@@ -1188,18 +1194,18 @@ def write_review_input(
         "",
         "## Required review questions",
         "",
-        "- Root/Pelvis: confirm Root/COM is at the visual waist and is control-only, or block Skin setup.",
-        "- Texture trace: confirm the cyan belt/waist texture search evidence and the paired real wire/bone view support the Root/Pelvis placement, or mark uncertain/blocker.",
+        "- Biped COM/Pelvis: confirm COM is at the visual waist and control-only, and Pelvis starts body deformation.",
+        "- Texture trace: confirm the cyan belt/waist texture search evidence and the paired real wire/bone view support the Biped COM/Pelvis placement, or mark uncertain/blocker.",
         "- Cross sections: confirm high-risk slices show bone centers inside the local body volume and display thickness is reasonable.",
         "- HeadTop/CrestTop: confirm HeadTop is skull/helmet volume and CrestTop is non-deforming crest/headwear reference.",
-        "- Hands: confirm whether each hand mass needs finger, claw, weapon, sleeve or socket detail bones.",
+        "- Hands: confirm whether each hand mass needs Biped fingers or explicit Biped detail structure.",
         "- Feet: confirm rear-foot, toe/front-foot and knee bend direction from side/top views.",
-        "- Deferred details: list crest, beak, cloth, weapon, wing or accessory bones required before Skin.",
+        "- Deferred details: list crest, beak, cloth, weapon, wing or accessory needs that must be represented in the Biped-only rig plan before Skin.",
         "",
         "## Output files",
         "",
         f"- Schema: `{rel(run_dir / 'visual_review' / 'review_schema.json', run_dir)}`",
-        f"- Template: `{rel(run_dir / 'visual_review' / 'semantic_visual_review_template.json', run_dir)}`",
+        f"- Review template: `{rel(run_dir / 'visual_review' / 'semantic_visual_review_template.json', run_dir)}`",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

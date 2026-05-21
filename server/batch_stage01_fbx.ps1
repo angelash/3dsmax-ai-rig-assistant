@@ -128,8 +128,7 @@ $VisualScreenshotDir = Join-Path (Join-Path $OutDir "visual_screenshots") $SafeA
 $TexturedScreenshotDir = Join-Path (Join-Path $OutDir "textured_screenshots") $SafeAssetName
 $WireBoneScreenshotDir = Join-Path (Join-Path $OutDir "wire_bone_screenshots") $SafeAssetName
 $BodyProfileJson = Join-Path $OutDir "$SafeAssetName`_body_profile.json"
-$TemplateSkeletonQcJson = Join-Path $OutDir "$SafeAssetName`_template_skeleton_fit_qc.json"
-$TemplateSkeletonQcMarkdown = Join-Path $OutDir "$SafeAssetName`_template_skeleton_fit_qc.md"
+$FitQcJson = Join-Path $OutDir "$SafeAssetName`_stage01_fit_qc.json"
 $RigDetailReviewJson = Join-Path $OutDir "$SafeAssetName`_rig_detail_review.json"
 $RigDetailReviewMarkdown = Join-Path $OutDir "$SafeAssetName`_rig_detail_review.md"
 $RigAssetQcJson = Join-Path $OutDir "$SafeAssetName`_stage01_rig_asset_qc.json"
@@ -151,14 +150,14 @@ if ((Test-Path -LiteralPath $VisualSnapshotJson) -and (Test-Path -LiteralPath $R
     & $Python $RigDetailReviewScript $VisualSnapshotJson --body-profile-json $BodyProfileJson --asset-name $SafeAssetName --out-dir $OutDir | Out-Null
 }
 
-if ((Test-Path -LiteralPath $SkinPrepGateScript) -and (Test-Path -LiteralPath $TemplateSkeletonQcJson)) {
+if ((Test-Path -LiteralPath $SkinPrepGateScript) -and (Test-Path -LiteralPath $FitQcJson)) {
     if (-not (Test-Path -LiteralPath $Python)) {
         $Python = "python"
     }
     & $Python $SkinPrepGateScript `
         --asset-name $SafeAssetName `
         --body-profile-json $BodyProfileJson `
-        --template-qc-json $TemplateSkeletonQcJson `
+        --biped-fit-qc-json $FitQcJson `
         --visual-qc-json $VisualQcJson `
         --rig-detail-review-json $RigDetailReviewJson `
         --rig-asset-qc-json $RigAssetQcJson `
@@ -210,10 +209,8 @@ $OrganizedScene = Resolve-AiraOutputPath "scene" "$SafeAssetName`_stage01_rig_sc
 $OrganizedSummary = Resolve-AiraOutputPath "reports" "$SafeAssetName`_stage01_batch_summary.md" (Join-Path $OutDir "$SafeAssetName`_stage01_batch_summary.md")
 $OrganizedBodyProfileJson = Resolve-AiraOutputPath "data" "$SafeAssetName`_body_profile.json" $BodyProfileJson
 $OrganizedBodyProfileMarkdown = Resolve-AiraOutputPath "reports" "$SafeAssetName`_body_profile.md" (Join-Path $OutDir "$SafeAssetName`_body_profile.md")
-$OrganizedFitQcJson = Resolve-AiraOutputPath "data" "$SafeAssetName`_stage01_fit_qc.json" (Join-Path $OutDir "$SafeAssetName`_stage01_fit_qc.json")
+$OrganizedFitQcJson = Resolve-AiraOutputPath "data" "$SafeAssetName`_stage01_fit_qc.json" $FitQcJson
 $OrganizedFitQcMarkdown = Resolve-AiraOutputPath "reports" "$SafeAssetName`_stage01_fit_qc.md" (Join-Path $OutDir "$SafeAssetName`_stage01_fit_qc.md")
-$OrganizedTemplateSkeletonQcJson = Resolve-AiraOutputPath "data" "$SafeAssetName`_template_skeleton_fit_qc.json" $TemplateSkeletonQcJson
-$OrganizedTemplateSkeletonQcMarkdown = Resolve-AiraOutputPath "reports" "$SafeAssetName`_template_skeleton_fit_qc.md" $TemplateSkeletonQcMarkdown
 $OrganizedVisualSnapshotJson = Resolve-AiraOutputPath "data" "$SafeAssetName`_visual_snapshot.json" $VisualSnapshotJson
 $OrganizedVisualQcJson = Resolve-AiraOutputPath "data" "$SafeAssetName`_visual_qc.json" $VisualQcJson
 $OrganizedVisualQcMarkdown = Resolve-AiraOutputPath "reports" "$SafeAssetName`_visual_qc.md" $VisualQcMarkdown
@@ -276,8 +273,6 @@ if (-not (Test-Path -LiteralPath $OrganizedWireBoneScreenshotDir)) {
     bodyProfileMarkdown = $OrganizedBodyProfileMarkdown
     fitQcJson = $OrganizedFitQcJson
     fitQcMarkdown = $OrganizedFitQcMarkdown
-    templateSkeletonQcJson = $OrganizedTemplateSkeletonQcJson
-    templateSkeletonQcMarkdown = $OrganizedTemplateSkeletonQcMarkdown
     visualSnapshotJson = $OrganizedVisualSnapshotJson
     visualQcJson = $OrganizedVisualQcJson
     visualQcMarkdown = $OrganizedVisualQcMarkdown

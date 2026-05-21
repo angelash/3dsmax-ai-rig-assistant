@@ -232,8 +232,6 @@ def stage01_rig_fbx_file(
         "bodyProfileMarkdown": str(out_dir / f"{output_name}_body_profile.md"),
         "fitQcJson": str(out_dir / f"{output_name}_stage01_fit_qc.json"),
         "fitQcMarkdown": str(out_dir / f"{output_name}_stage01_fit_qc.md"),
-        "templateSkeletonQcJson": str(out_dir / f"{output_name}_template_skeleton_fit_qc.json"),
-        "templateSkeletonQcMarkdown": str(out_dir / f"{output_name}_template_skeleton_fit_qc.md"),
         "rigDetailReviewJson": str(out_dir / f"{output_name}_rig_detail_review.json"),
         "rigDetailReviewMarkdown": str(out_dir / f"{output_name}_rig_detail_review.md"),
         "stage01SkinPrepGateJson": str(out_dir / f"{output_name}_stage01_skin_prep_gate.json"),

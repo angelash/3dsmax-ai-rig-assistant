@@ -134,6 +134,13 @@ def draw_cross(canvas: Canvas, x: int, y: int, color: Color, size: int = 10, wid
     canvas.line(x, y - size, x, y + size, color, width)
 
 
+def skeleton_bones(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    biped_bones = snapshot.get("bipedBones")
+    if isinstance(biped_bones, list) and biped_bones:
+        return biped_bones
+    return snapshot.get("templateBones", [])
+
+
 def draw_view(
     snapshot: dict[str, Any],
     view: str,
@@ -150,7 +157,7 @@ def draw_view(
         x, y = to_pixel(point)
         canvas.point(x, y, (184, 184, 184), 1)
 
-    for bone in snapshot.get("templateBones", []):
+    for bone in skeleton_bones(snapshot):
         start = bone.get("startPosition")
         end = bone.get("endPosition")
         if start is not None and end is not None:
@@ -659,6 +666,7 @@ def analyze(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "visualMode": "local_silhouette_projection",
+        "skeletonSource": "biped" if snapshot.get("bipedBones") else "legacy_template_bones",
         "decisionPolicy": "visual_semantic_gate_only",
         "scorePolicy": "scores_disabled_for_decision_diagnostic_only",
         "visualScore": visual_score,

@@ -14,30 +14,23 @@ SEGMENT_SPECS: list[dict[str, Any]] = [
     {"phase": "02 torso", "start": "Spine", "end": "Chest", "role": "spine_to_chest", "min": 0.05, "max": 0.16, "rules": ["center", "up"]},
     {"phase": "02 torso", "start": "Chest", "end": "Neck", "role": "chest_to_neck", "min": 0.08, "max": 0.24, "rules": ["center", "up"]},
     {"phase": "06 neck and head", "start": "Neck", "end": "Head", "role": "short_neck_to_head", "min": 0.04, "max": 0.16, "rules": ["center", "up"]},
-    {"phase": "06 neck and head", "start": "Head", "end": "HeadTop", "role": "head_volume_axis", "min": 0.04, "max": 0.14, "rules": ["center", "up"]},
     {"phase": "04 clavicle and arms", "start": "Chest", "end": "L_Clavicle", "role": "left_clavicle", "min": 0.10, "max": 0.28, "rules": ["left", "outward"]},
     {"phase": "04 clavicle and arms", "start": "L_Clavicle", "end": "L_Shoulder", "role": "left_shoulder_socket", "min": 0.06, "max": 0.20, "rules": ["left", "outward"]},
     {"phase": "04 clavicle and arms", "start": "L_Shoulder", "end": "L_Elbow", "role": "left_upper_arm", "min": 0.08, "max": 0.24, "rules": ["left", "outward", "down"]},
     {"phase": "04 clavicle and arms", "start": "L_Elbow", "end": "L_Wrist", "role": "left_forearm", "min": 0.05, "max": 0.18, "rules": ["left", "outward", "down"]},
-    {"phase": "04 clavicle and arms", "start": "L_Wrist", "end": "L_Hand", "role": "left_hand_mass", "min": 0.01, "max": 0.09, "rules": ["left", "outward"]},
-    {"phase": "04 clavicle and arms", "start": "L_Hand", "end": "L_HandTip", "role": "left_hand_tip_detail", "min": 0.015, "max": 0.08, "rules": ["left", "outward"]},
     {"phase": "04 clavicle and arms", "start": "Chest", "end": "R_Clavicle", "role": "right_clavicle", "min": 0.10, "max": 0.28, "rules": ["right", "outward"]},
     {"phase": "04 clavicle and arms", "start": "R_Clavicle", "end": "R_Shoulder", "role": "right_shoulder_socket", "min": 0.06, "max": 0.20, "rules": ["right", "outward"]},
     {"phase": "04 clavicle and arms", "start": "R_Shoulder", "end": "R_Elbow", "role": "right_upper_arm", "min": 0.08, "max": 0.24, "rules": ["right", "outward", "down"]},
     {"phase": "04 clavicle and arms", "start": "R_Elbow", "end": "R_Wrist", "role": "right_forearm", "min": 0.05, "max": 0.18, "rules": ["right", "outward", "down"]},
-    {"phase": "04 clavicle and arms", "start": "R_Wrist", "end": "R_Hand", "role": "right_hand_mass", "min": 0.01, "max": 0.09, "rules": ["right", "outward"]},
-    {"phase": "04 clavicle and arms", "start": "R_Hand", "end": "R_HandTip", "role": "right_hand_tip_detail", "min": 0.015, "max": 0.08, "rules": ["right", "outward"]},
     {"phase": "03 legs and feet", "start": "Pelvis", "end": "L_Hip", "role": "left_hip_socket", "min": 0.06, "max": 0.16, "rules": ["left", "outward", "down"]},
     {"phase": "03 legs and feet", "start": "L_Hip", "end": "L_Knee", "role": "left_thigh", "min": 0.10, "max": 0.24, "rules": ["left", "down"]},
     {"phase": "03 legs and feet", "start": "L_Knee", "end": "L_Ankle", "role": "left_calf", "min": 0.08, "max": 0.20, "rules": ["left", "down"]},
-    {"phase": "03 legs and feet", "start": "L_Ankle", "end": "L_Heel", "role": "left_heel_depth_pivot", "min": 0.02, "max": 0.10, "rules": ["left", "down"]},
-    {"phase": "03 legs and feet", "start": "L_Heel", "end": "L_Foot", "role": "left_midfoot_depth_axis", "min": 0.04, "max": 0.14, "rules": ["left", "toe_forward", "level"]},
+    {"phase": "03 legs and feet", "start": "L_Ankle", "end": "L_Foot", "role": "left_midfoot_depth_axis", "min": 0.04, "max": 0.14, "rules": ["left", "toe_forward", "level"]},
     {"phase": "03 legs and feet", "start": "L_Foot", "end": "L_Toe", "role": "left_front_foot", "min": 0.06, "max": 0.20, "rules": ["left", "toe_forward", "level"]},
     {"phase": "03 legs and feet", "start": "Pelvis", "end": "R_Hip", "role": "right_hip_socket", "min": 0.06, "max": 0.16, "rules": ["right", "outward", "down"]},
     {"phase": "03 legs and feet", "start": "R_Hip", "end": "R_Knee", "role": "right_thigh", "min": 0.10, "max": 0.24, "rules": ["right", "down"]},
     {"phase": "03 legs and feet", "start": "R_Knee", "end": "R_Ankle", "role": "right_calf", "min": 0.08, "max": 0.20, "rules": ["right", "down"]},
-    {"phase": "03 legs and feet", "start": "R_Ankle", "end": "R_Heel", "role": "right_heel_depth_pivot", "min": 0.02, "max": 0.10, "rules": ["right", "down"]},
-    {"phase": "03 legs and feet", "start": "R_Heel", "end": "R_Foot", "role": "right_midfoot_depth_axis", "min": 0.04, "max": 0.14, "rules": ["right", "toe_forward", "level"]},
+    {"phase": "03 legs and feet", "start": "R_Ankle", "end": "R_Foot", "role": "right_midfoot_depth_axis", "min": 0.04, "max": 0.14, "rules": ["right", "toe_forward", "level"]},
     {"phase": "03 legs and feet", "start": "R_Foot", "end": "R_Toe", "role": "right_front_foot", "min": 0.06, "max": 0.20, "rules": ["right", "toe_forward", "level"]},
 ]
 
@@ -101,7 +94,8 @@ def round_point(point: Point3 | None) -> Point3 | None:
 
 def bone_map(snapshot: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
     result: dict[tuple[str, str], dict[str, Any]] = {}
-    for bone in snapshot.get("templateBones", []):
+    bones = snapshot.get("bipedBones") or snapshot.get("templateBones", [])
+    for bone in bones:
         result[(bone.get("start", ""), bone.get("end", ""))] = bone
     return result
 
@@ -120,7 +114,7 @@ def skeleton_plan(body_type: str, snapshot: dict[str, Any]) -> dict[str, Any]:
         "bodyType": body_type,
         "characterClass": "A1 compact Q-bird hero" if body_type == "compact_q_bird_wide_body_short_legs" else "stylized humanoid",
         "guideCountExpected": len([v for v in guides.values() if v is not None]),
-        "templateBoneCountExpected": len(SEGMENT_SPECS),
+        "bipedSegmentCountExpected": len(SEGMENT_SPECS),
         "bipedStructure": {
             "spineLinks": 2,
             "neckLinks": 1,
@@ -131,13 +125,13 @@ def skeleton_plan(body_type: str, snapshot: dict[str, Any]) -> dict[str, Any]:
             "toeLinks": 1,
             "trianglePelvis": True,
             "handDetail": visible_hand_detail,
-            "rootDeformerPolicy": "root_guide_only_no_root_to_pelvis_template_bone",
+            "rootDeformerPolicy": "biped_com_control_only_start_deformation_from_pelvis",
             "headTopPolicy": "HeadTop is skull/helmet cap; CrestTop marks crest/headwear as a non-deforming accessory reference",
             "footPivotPolicy": "Heel/Foot/Toe depth guides generated from side/top mesh bounds",
         },
         "extraBonesDeferred": [
-            "Fine finger/claw chains remain optional; add them only when separated texture or mesh landmarks are visible.",
-            "CrestTop is available as a non-deforming accessory reference; do not add it to Skin unless a rigger explicitly creates a dedicated accessory rig.",
+            "Fine finger/claw chains remain optional; represent them through Biped structure/options only when separated texture or mesh landmarks are visible.",
+            "CrestTop is a visual accessory reference; do not add separate ordinary Bones for it in the Stage01 body flow.",
         ],
     }
 
@@ -166,7 +160,7 @@ def check_segment(
     if end is None:
         issues.append(f"missing end guide {end_name}")
     if not bone or bone.get("exists") is not True:
-        issues.append("missing template bone")
+        issues.append("missing Biped segment evidence")
 
     if start is None or end is None:
         return {
@@ -297,8 +291,6 @@ def semantic_skin_review(
     description = ((body_profile or {}).get("description") or "").lower()
     risks: list[dict[str, Any]] = []
     policies: list[dict[str, str]] = []
-    template_bones = bone_map(snapshot)
-
     def guide(name: str) -> Point3 | None:
         value = guides.get(name)
         return value if isinstance(value, list) and len(value) >= 3 else None
@@ -320,20 +312,12 @@ def semantic_skin_review(
     if root and pelvis:
         root_pelvis_ratio = abs(pelvis[2] - root[2]) / height
         root_near_floor = root[2] <= min_z + height * 0.03
-        root_template_bone_exists = ("Root", "Pelvis") in template_bones
-        if root_near_floor and root_pelvis_ratio >= 0.25 and root_template_bone_exists:
-            add_risk(
-                "root_to_pelvis_control_only",
-                "skin_blocker",
-                "rigging",
-                "Root->Pelvis spans from the floor/root control area into the body. This is useful as a rig control/reference axis but unsafe as a deformation bone.",
-                "Mark AIRA_BONE_Root_Pelvis / Biped COM as control-only and exclude it from Skin influences; start body deformation weights from Pelvis.",
-            )
+        if root_near_floor and root_pelvis_ratio >= 0.25:
             policies.append(
                 {
-                    "code": "exclude_root_to_pelvis_from_skin",
-                    "target": "AIRA_BONE_Root_Pelvis",
-                    "policy": "control_only_non_deforming",
+                    "code": "biped_com_control_only",
+                    "target": "Biped COM / Root guide",
+                    "policy": "control_only_non_deforming; Skin deformation starts from Biped Pelvis, not a separate Root->Pelvis bone",
                 }
             )
         elif root_near_floor:
@@ -341,7 +325,7 @@ def semantic_skin_review(
                 {
                     "code": "root_guide_only_no_skin",
                     "target": "Root guide / Biped COM",
-                    "policy": "control_only_reference_not_in_template_deformer_chain",
+                    "policy": "control_only_reference_not_in_biped_deformer_chain",
                 }
             )
         else:
@@ -360,16 +344,7 @@ def semantic_skin_review(
         head_top_ratio = abs(head_top[2] - head[2]) / height
         head_top_near_bounds = head_top[2] >= min_z + height * 0.94
         crest_like_body = "crest" in description or body_type == "compact_q_bird_wide_body_short_legs"
-        crest_template_bone_exists = ("HeadTop", "CrestTop") in template_bones
-        if crest_template_bone_exists:
-            add_risk(
-                "cresttop_must_not_be_skin_bone",
-                "skin_blocker",
-                "rigging",
-                "CrestTop/headwear is present as a template bone. On this model it is a hat/crest accessory reference, not the main head deformation chain.",
-                "Remove HeadTop->CrestTop from Skin candidate bones. Keep HeadTop on the skull/helmet volume and use CrestTop only as a non-deforming accessory landmark.",
-            )
-        elif crest_like_body and head_top_ratio >= 0.10 and head_top_near_bounds and not crest_top:
+        if crest_like_body and head_top_ratio >= 0.10 and head_top_near_bounds and not crest_top:
             add_risk(
                 "headtop_may_be_crest_or_ornament",
                 "skin_blocker",
@@ -382,19 +357,19 @@ def semantic_skin_review(
                 {
                     "code": "headtop_skull_cresttop_accessory_reference",
                     "target": "HeadTop/CrestTop",
-                    "policy": "main head deformation ends at HeadTop; CrestTop marks non-deforming crest/headwear extent",
+                    "policy": "main Biped head deformation stays on skull volume; CrestTop is only a visual reference unless the Biped structure is explicitly extended",
                 }
             )
 
     hand_detail = plan.get("bipedStructure", {}).get("handDetail", "")
     if hand_detail == "single hand mass":
         add_risk(
-            "single_hand_mass_requires_detail_signoff",
-            "skin_blocker",
-            "rigging",
-            "The current skeleton collapses each hand into one mass. This is acceptable only if the model has no visible fingers, claws, weapon grips, sleeve flaps or hand accessories that need independent deformation.",
-            "Inspect both hand ends in front/side/top screenshots. Add finger/claw/detail/socket bones before Skin if any separated hand features are visible.",
-        )
+                "single_hand_mass_requires_detail_signoff",
+                "skin_blocker",
+                "rigging",
+                "The current skeleton collapses each hand into one mass. This is acceptable only if the model has no visible fingers, claws, weapon grips, sleeve flaps or hand accessories that need independent deformation.",
+                "Inspect both hand ends in front/side/top screenshots. Reconfigure the Biped hand/finger structure before Skin if any separated hand features are visible.",
+            )
     elif guide("L_HandTip") and guide("R_HandTip"):
         policies.append(
             {
@@ -423,7 +398,7 @@ def semantic_skin_review(
             {
                 "code": "heel_midfoot_toe_depth_chain",
                 "target": "L_Heel/L_Foot/L_Toe and R_Heel/R_Foot/R_Toe",
-                "policy": "side/top depth represented explicitly in the template foot chain",
+                "policy": "heel guides are visual side/top references; only Biped Foot/Toe nodes enter Skin in the Biped-only flow",
             }
         )
 
@@ -502,7 +477,7 @@ def write_markdown(qc: dict[str, Any], snapshot_path: Path, md_path: Path) -> No
         "",
         f"- Body type: `{plan['bodyType']}`",
         f"- Character class: `{plan['characterClass']}`",
-        f"- Expected template bones: `{plan['templateBoneCountExpected']}`",
+        f"- Expected Biped segments: `{plan['bipedSegmentCountExpected']}`",
         f"- Biped structure: `{json.dumps(plan['bipedStructure'], ensure_ascii=False)}`",
         "",
         "## Review Order",

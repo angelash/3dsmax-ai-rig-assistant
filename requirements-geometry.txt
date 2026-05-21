@@ -1,0 +1,4 @@
+trimesh==4.12.2
+skeletor==1.5.0
+networkx==3.4.2
+charset-normalizer==3.4.7

@@ -1,0 +1,37 @@
+# Local IDE / MCP runtime config
+.cursor/mcp.json
+.vscode/
+.idea/
+.env
+.env.*
+
+# Local Python runtime
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Generated tool outputs
+out/
+
+# Local source assets used for experiments; keep these out of git.
+source/
+
+# 3ds Max / DCC generated files and asset working copies
+*.fbx
+*.max
+*.obj
+*.fbm/
+*.sv$
+*.bak
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+Thumbs.db
+.DS_Store

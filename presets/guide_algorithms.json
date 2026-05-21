@@ -1,0 +1,63 @@
+{
+  "default": "tutorial_centerline_qbird",
+  "decisionPolicy": "visual_semantic_gate_only",
+  "legacyScoringDisabled": true,
+  "algorithms": [
+    {
+      "id": "bbox_humanoid",
+      "label": "BBox Humanoid Baseline",
+      "status": "disabled_legacy",
+      "enabled": false,
+      "preserve": false,
+      "description": "Disabled: old geometric baseline is misleading for this model and must not be used for recommendations or production decisions."
+    },
+    {
+      "id": "mesh_profile",
+      "label": "Mesh Profile",
+      "status": "disabled_legacy",
+      "enabled": false,
+      "preserve": false,
+      "description": "Disabled: mesh-profile scoring created false confidence and must not be used."
+    },
+    {
+      "id": "qbird_profile",
+      "label": "Q Bird Profile",
+      "status": "disabled_legacy",
+      "enabled": false,
+      "preserve": false,
+      "description": "Disabled: template rules alone are not reliable enough for Skin handoff."
+    },
+    {
+      "id": "semantic_qbird",
+      "label": "Semantic Q Bird",
+      "status": "disabled_legacy",
+      "enabled": false,
+      "preserve": false,
+      "description": "Disabled: old semantic estimate still depends on brittle profile scoring."
+    },
+    {
+      "id": "visual_semantic_qbird",
+      "label": "Visual Semantic Q Bird",
+      "status": "disabled_legacy",
+      "enabled": false,
+      "preserve": false,
+      "description": "Disabled: point-cloud target scoring can pass while arm/head/root semantics remain wrong."
+    },
+    {
+      "id": "tutorial_visual_qbird",
+      "label": "Tutorial Visual Q Bird",
+      "status": "disabled_legacy",
+      "enabled": false,
+      "preserve": false,
+      "description": "Disabled: surface-targeted visual pass is not a Skin-ready semantic solution."
+    },
+    {
+      "id": "tutorial_centerline_qbird",
+      "label": "Visual Candidate Generator",
+      "status": "visual_candidate_only",
+      "enabled": true,
+      "preserve": true,
+      "description": "Only allowed candidate generator. Its numeric scores are diagnostic-only; Skin handoff is decided solely by visual semantic blockers and human signoff."
+    }
+  ]
+}

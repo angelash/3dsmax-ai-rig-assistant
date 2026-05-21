@@ -1,0 +1,32 @@
+{
+  "name": "luban_stage01_biped",
+  "description": "Stage 01 Biped structure preset for a stylized short character like Luban Qihao.",
+  "target_3ds_max": "2020+",
+  "coordinate_assumption": {
+    "up_axis": "Z",
+    "left_right_axis": "X",
+    "character_facing": "-Y",
+    "biped_create_angle_degrees": -90
+  },
+  "biped": {
+    "arms": true,
+    "neckLinks": 1,
+    "spineLinks": 2,
+    "legLinks": 3,
+    "fingers": 4,
+    "fingerLinks": 3,
+    "toes": 1,
+    "toeLinks": 1,
+    "ankleAttach": 0.2,
+    "trianglePelvis": true,
+    "forearmTwistLinks": 0
+  },
+  "stage01_tools": [
+    "CreateGuidesFromSelection",
+    "MirrorLeftGuidesToRight",
+    "CreateBipedFromGuides",
+    "FitBipedToGuides",
+    "ValidateStage01",
+    "SaveRigVersion"
+  ]
+}

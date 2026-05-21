@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "3dsmax-ai-rig-assistant": {
+      "command": "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\.venv\\Scripts\\python.exe",
+      "args": [
+        "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\server\\mcp_server.py"
+      ],
+      "env": {}
+    }
+  }
+}

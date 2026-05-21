@@ -17,6 +17,7 @@ __pycache__/
 
 # Generated tool outputs
 out/
+out_archives/
 
 # Local source assets used for experiments; keep these out of git.
 source/

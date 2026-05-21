@@ -227,6 +227,48 @@
 
 `wireBoneScreenshotDir` 指向 3ds Max 技术视图截图目录。这里的 front / side / top PNG 使用线框材质叠加 Biped 骨段和 guide，用来直观看侧面重心、腰部原点、头/帽分离和骨骼粗细。
 
+### Stage02SkinMaxFile
+
+输入：
+
+```json
+{
+  "source_max": "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\out\\runs\\luxun_model__YYYYMMDD_HHMMSS\\scene\\luxun_model_stage01_rig_scene.max",
+  "asset_name": "luxun_model",
+  "stage01_skin_prep_gate_json": "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\out\\runs\\luxun_model__YYYYMMDD_HHMMSS\\data\\luxun_model_stage01_skin_prep_gate.json",
+  "allow_blocked_stage01": false,
+  "bone_affect_limit": 3
+}
+```
+
+`Stage02SkinMaxFile` 是独立 Skin 执行入口，只读取现有 Stage01 `.max` 场景，不创建 Guide，不重新拟合 Biped，也不修改 Stage01 绑骨逻辑。默认要求 `stage01_skin_prep_gate_json.skinSetupReady=true`；`allow_blocked_stage01=true` 只允许研究性第一版权重，输出会保持 `productionReady=false`。
+
+输出：
+
+```json
+{
+  "ok": true,
+  "assetName": "luxun_model",
+  "sourceMax": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/scene/luxun_model_stage01_rig_scene.max",
+  "runDir": "F:/workspace/github/3dsmax-ai-rig-assistant/out/stage02_runs/luxun_model__YYYYMMDD_HHMMSS",
+  "stage01GateStatus": "skin_setup_ready",
+  "boneAffectLimit": 3,
+  "scene": "F:/workspace/github/3dsmax-ai-rig-assistant/out/stage02_runs/luxun_model__YYYYMMDD_HHMMSS/scene/luxun_model_stage02_skin_scene.max",
+  "stage02SkinReportJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/stage02_runs/luxun_model__YYYYMMDD_HHMMSS/data/luxun_model_stage02_skin_report.json",
+  "stage02SkinReportMarkdown": "F:/workspace/github/3dsmax-ai-rig-assistant/out/stage02_runs/luxun_model__YYYYMMDD_HHMMSS/reports/luxun_model_stage02_skin_report.md",
+  "stage02AssetQcJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/stage02_runs/luxun_model__YYYYMMDD_HHMMSS/data/luxun_model_stage02_skin_asset_qc.json"
+}
+```
+
+当前 Stage02 检测和输出项：
+
+- 添加/复用 Skin Modifier。
+- 只添加 Biped 变形节点，COM/vertical root 保持 control-only。
+- 设置 Bone Affect Limit，默认教程值为 `3`。
+- 根据 Biped 段、左右侧、身高区域生成第一轮初始顶点权重。
+- 调用可用的 Remove Zero Weights。
+- 输出 `skinWeightsComplete=false`、`deformationTestComplete=false`、`productionReady=false`，直到人工权重细刷和动作测试完成。
+
 输出：
 
 ```json

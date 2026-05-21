@@ -14,6 +14,7 @@ mcp = FastMCP(name="3ds Max AI Rig Assistant")
 TOOL_ROOT = Path(__file__).resolve().parents[1]
 BATCH_QC_SCRIPT = TOOL_ROOT / "server" / "batch_qc_fbx.ps1"
 BATCH_STAGE01_SCRIPT = TOOL_ROOT / "server" / "batch_stage01_fbx.ps1"
+BATCH_STAGE02_SCRIPT = TOOL_ROOT / "server" / "batch_stage02_skin.ps1"
 
 
 def _call(command: str) -> dict[str, Any]:
@@ -115,6 +116,20 @@ def asset_qc_current_scene() -> dict[str, Any]:
     """Generate an asset QC JSON and Markdown report for the current 3ds Max scene."""
 
     return _call("asset_qc_current_scene")
+
+
+@mcp.tool()
+def stage02_load_tool() -> dict[str, Any]:
+    """Load the independent Stage02 Skin setup tool inside 3ds Max."""
+
+    return _call("stage02_load_tool")
+
+
+@mcp.tool()
+def stage02_skin_current_scene() -> dict[str, Any]:
+    """Run Stage02 initial Skin setup on the current 3ds Max scene."""
+
+    return _call("stage02_skin_current_scene")
 
 
 @mcp.tool()
@@ -262,6 +277,74 @@ def stage01_rig_fbx_file(
         "wireBoneScreenshotDir": str(out_dir / "runs" / output_name / "wire_bone_screenshots"),
         "rigAssetQcJson": str(out_dir / f"{output_name}_stage01_rig_asset_qc.json"),
         "rigAssetQcMarkdown": str(out_dir / f"{output_name}_stage01_rig_asset_qc.md"),
+        "batchReturnCode": completed.returncode,
+    }
+
+
+@mcp.tool()
+def stage02_skin_max_file(
+    source_max: str,
+    asset_name: str = "",
+    stage01_skin_prep_gate_json: str = "",
+    allow_blocked_stage01: bool = False,
+    bone_affect_limit: int = 3,
+) -> dict[str, Any]:
+    """Run independent Stage02 Skin setup on an existing Stage01 MAX scene."""
+
+    source = Path(source_max)
+    if not source.exists():
+        raise FileNotFoundError(f"Source MAX scene not found: {source_max}")
+    if not 1 <= bone_affect_limit <= 4:
+        raise ValueError("bone_affect_limit must be between 1 and 4.")
+
+    safe_asset_name = asset_name or source.stem.replace("_stage01_rig_scene", "")
+    cmd = [
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(BATCH_STAGE02_SCRIPT),
+        "-SourceMax",
+        str(source),
+        "-AssetName",
+        safe_asset_name,
+        "-BoneAffectLimit",
+        str(bone_affect_limit),
+    ]
+    if stage01_skin_prep_gate_json:
+        gate = Path(stage01_skin_prep_gate_json)
+        if not gate.exists():
+            raise FileNotFoundError(f"Stage01 Skin Prep Gate JSON not found: {stage01_skin_prep_gate_json}")
+        cmd.extend(["-Stage01SkinPrepGateJson", str(gate)])
+    if allow_blocked_stage01:
+        cmd.append("-AllowBlockedStage01")
+
+    completed = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=900,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError((completed.stderr or completed.stdout).strip())
+
+    batch_result = _parse_batch_json(completed.stdout)
+    if batch_result:
+        batch_result["batchReturnCode"] = completed.returncode
+        return batch_result
+
+    output_name = "".join("_" if ch in '\\/:*?"<>|' else ch for ch in safe_asset_name)
+    out_dir = TOOL_ROOT / "out" / "stage02_runs" / output_name
+    return {
+        "ok": True,
+        "sourceMax": str(source),
+        "assetName": output_name,
+        "runRoot": str(out_dir),
+        "boneAffectLimit": bone_affect_limit,
         "batchReturnCode": completed.returncode,
     }
 

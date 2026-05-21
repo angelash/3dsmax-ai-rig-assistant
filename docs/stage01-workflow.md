@@ -93,7 +93,7 @@ AIRA_GUIDE_L_Toe
 
 - 手指只创建 Biped 结构，暂不逐指自动匹配。
 - 不自动创建耳机、背包、枪、炮等附属 Bones；那是第二篇范围。
-- 不自动添加 Skin，也不处理权重；那是第三、四篇范围。批处理会生成 `*_stage01_skin_prep_gate.md`，说明进入 Skin 前还需要哪些人工/VLM 语义确认和权重准备。
+- Stage01 不自动添加 Skin，也不处理权重；批处理会生成 `*_stage01_skin_prep_gate.md`，说明进入 Skin 前还需要哪些人工/VLM 语义确认和权重准备。第三、四篇范围已独立为 `docs/stage02-skin-workflow.md` 和 `server/batch_stage02_skin.ps1`，不会回改 Stage01 绑骨逻辑。
 - Biped 节点贴合依赖 3ds Max 的 Biped IK 和 Figure Mode，有些节点可能需要人工微调。
 - 离线 MCP/批处理入口已接入，但 Max 内部桥接仍只允许白名单工具函数，不接受任意 MaxScript。
 

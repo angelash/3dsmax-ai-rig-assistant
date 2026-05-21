@@ -12,6 +12,7 @@ Commands are line-delimited plain text. Responses are one-line JSON.
 global AIRA_MCP_Bridge
 global AIRA_MCP_Bridge_UI
 global AIRA_Stage01
+global AIRA_Stage02
 global AIRA_AssetQC
 
 struct AIRAMCPBridge
@@ -20,6 +21,7 @@ struct AIRAMCPBridge
     port = 37820,
     listener = undefined,
     stage01Path = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_stage01_biped.ms",
+    stage02Path = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_stage02_skin.ms",
     assetQcPath = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_asset_qc.ms",
 
     fn log msg =
@@ -77,6 +79,22 @@ struct AIRAMCPBridge
             )
         )
         AIRA_AssetQC != undefined
+    ),
+
+    fn ensureStage02Loaded =
+    (
+        if AIRA_Stage02 == undefined do
+        (
+            if doesFileExist stage02Path then
+            (
+                fileIn stage02Path
+            )
+            else
+            (
+                log ("Stage02 script missing: " + stage02Path)
+            )
+        )
+        AIRA_Stage02 != undefined
     ),
 
     fn startListener =
@@ -221,6 +239,24 @@ struct AIRAMCPBridge
                     jsonResponse true action ("Asset QC report generated. Issues=" + (result[3] as string)) (result[1] + "|" + result[2])
                 )
                 else jsonResponse false action "Asset QC tool is not loaded." ""
+            )
+
+            "stage02_load_tool":
+            (
+                if ensureStage02Loaded() then
+                    jsonResponse true action "Stage02 Skin tool loaded." stage02Path
+                else
+                    jsonResponse false action "Could not load Stage02 Skin tool." stage02Path
+            )
+
+            "stage02_skin_current_scene":
+            (
+                if ensureStage02Loaded() then
+                (
+                    local result = AIRA_Stage02.runInitialSkin "current_scene"
+                    jsonResponse true action ("Stage02 Skin setup generated. skinSetupReady=" + (result[3] as string) + ", issues=" + (result[4] as string)) (result[1] + "|" + result[2])
+                )
+                else jsonResponse false action "Stage02 Skin tool is not loaded." ""
             )
 
             default:

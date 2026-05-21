@@ -1,8 +1,9 @@
 # 3ds Max AI Rig Assistant
 
-这是一个面向 3ds Max 2020+ 的 AI 辅助绑定/资产质检工具原型。当前版本包含两条生产入口：
+这是一个面向 3ds Max 2020+ 的 AI 辅助绑定/资产质检工具原型。当前版本包含三条入口：
 
 - Stage 01：Biped 骨架 Guide 创建与粗匹配。
+- Stage 02：独立 Skin 设置与第一轮初始权重。
 - Asset QC：读取 FBX/当前场景，输出游戏资产质检 JSON + Markdown 报告。
 
 核心思路：
@@ -21,14 +22,17 @@ MCP 入口只暴露白名单工具，不让 AI 任意执行 MaxScript。
 | 路径 | 说明 |
 | --- | --- |
 | `maxscript/aira_stage01_biped.ms` | 3ds Max 里直接运行的 Stage01 工具 |
+| `maxscript/aira_stage02_skin.ms` | 独立 Stage02 Skin 设置与初始权重工具 |
 | `maxscript/aira_asset_qc.ms` | 资产质检工具，输出 JSON/Markdown |
 | `maxscript/aira_mcp_bridge.ms` | 3ds Max 内部 MCP/TCP 桥接脚本 |
 | `maxscript/batch_asset_qc_fbx.ms` | `3dsmaxbatch.exe` 离线检测 FBX 的 MaxScript |
+| `maxscript/batch_stage02_skin.ms` | `3dsmaxbatch.exe` 离线执行 Stage02 Skin 的 MaxScript |
 | `server/mcp_server.py` | Python MCP server，暴露白名单工具 |
 | `server/direct_cli.py` | 不经过 MCP 客户端的直连测试命令 |
 | `server/run_mcp_server.ps1` | 手动启动 MCP server |
 | `server/stage01_auto.ps1` | 直连执行 Stage01 粗自动流程 |
 | `server/batch_qc_fbx.ps1` | 离线检测任意本地 FBX |
+| `server/batch_stage02_skin.ps1` | 从 Stage01 `.max` 场景独立执行 Stage02 Skin |
 | `server/batch_qc_luxun.ps1` | 陆逊模型的离线检测样例 |
 | `server/benchmark_luxun_algorithms.ps1` | 旧算法评分入口，生产默认禁用 |
 | `server/check_algorithm_default.ps1` | 旧推荐检查入口，生产默认禁用 |
@@ -43,6 +47,7 @@ MCP 入口只暴露白名单工具，不让 AI 任意执行 MaxScript。
 | `presets/luban_stage01_biped.json` | 鲁班七号这类卡通矮角色的 Biped 结构预设 |
 | `presets/guide_algorithms.json` | Guide 候选生成器登记表，当前只启用 `tutorial_centerline_qbird` |
 | `docs/stage01-workflow.md` | 使用流程、坐标约定、边界说明 |
+| `docs/stage02-skin-workflow.md` | 独立 Skin 设置、初始权重和生产边界说明 |
 | `docs/bone-fit-qc-method.md` | 骨骼适配自检指标和改进路线 |
 | `docs/auto-rigging-algorithm-survey.md` | 自动绑定算法调研和接入评估 |
 | `docs/mcp-setup.md` | MCP 接入与运行说明 |
@@ -117,6 +122,19 @@ Stage01 会先从 mesh 顶点做高度切片，识别宽高比、深高比、最
 `visual_review_pack.py` 会在 run 内生成 `visual_review/`：`full/` 保存全局前/侧/顶证据图，`regions/` 保存 head、pelvis、left/right hand、left/right foot 的局部裁剪，`review_input.md` 和 `review_schema.json` 用于人工或 VLM 做结构化语义审查。它只输出 blocker/pass/uncertain 这类审查项，不输出分数。硬规则是：frontWrap、sideWrap、topWrap、rootPelvisPolicy、legClothingOcclusion、footPivot 等必要检查没有全部 `pass`，不得进入 Skin。规则细节见 `docs/stage01-biped-multiview-signoff.md`。
 
 `batch_stage01_fbx.ps1` 会在证据包生成后执行最终 Skin gate：如果传入 `-VisualSignoffJson`，使用该签核；如果设置了 `OPENAI_API_KEY` 且未传 `-SkipVlmReview`，调用 `vlm_multiview_review.py` 自动生成 VLM 签核；如果没有签核，gate 会保持阻断并说明缺少多视图包裹性确认。VLM 只提供语义签核 JSON，不直接放行；最终仍由 `stage01_skin_prep_gate.py` 校验 schema、必填检查项、Biped fit 和资产 QC。
+
+## Stage02 Skin 初始搭建
+
+Stage02 独立读取 Stage01 产出的 `.max` 场景，不创建 Guide，不重新拟合 Biped，也不改 Stage01 绑骨逻辑。默认必须提供 `*_stage01_skin_prep_gate.json` 且其中 `skinSetupReady=true`；如果只是研究第一版自动权重，可以显式加 `-AllowBlockedStage01`，报告会保持 `productionReady=false`。
+
+```powershell
+F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage02_skin.ps1 `
+  -SourceMax "F:\workspace\github\3dsmax-ai-rig-assistant\out\runs\luxun_model__YYYYMMDD_HHMMSS\scene\luxun_model_stage01_rig_scene.max" `
+  -AssetName luxun_model `
+  -Stage01SkinPrepGateJson "F:\workspace\github\3dsmax-ai-rig-assistant\out\runs\luxun_model__YYYYMMDD_HHMMSS\data\luxun_model_stage01_skin_prep_gate.json"
+```
+
+它会添加/复用 `Skin` 修改器，把变形用 Biped 节点加入 Skin，按教程默认把 Bone Affect Limit 设为 `3`，再用 Biped 段距离、左右侧和高度区域做第一轮权重。输出放在 `out/stage02_runs/<assetName>__YYYYMMDD_HHMMSS/`，详见 `docs/stage02-skin-workflow.md`。
 
 整理已有输出目录：
 

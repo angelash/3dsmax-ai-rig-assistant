@@ -18,6 +18,8 @@ COMMANDS = [
     "stage01_save_file",
     "stage01_auto_pipeline",
     "asset_qc_current_scene",
+    "stage02_load_tool",
+    "stage02_skin_current_scene",
 ]
 
 

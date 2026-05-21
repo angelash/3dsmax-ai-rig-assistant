@@ -29,6 +29,7 @@ $VlmReviewScript = Join-Path $ToolRoot "server\vlm_multiview_review.py"
 $RigDetailReviewScript = Join-Path $ToolRoot "server\rig_detail_review.py"
 $SkinPrepGateScript = Join-Path $ToolRoot "server\stage01_skin_prep_gate.py"
 $OrganizeOutScript = Join-Path $ToolRoot "server\organize_out_dir.py"
+$NumberedLayoutScript = Join-Path $ToolRoot "server\stage01_numbered_layout.py"
 $Python = Join-Path $ToolRoot ".venv\Scripts\python.exe"
 $MaxBatch = "D:\Program files\Autodesk\3ds Max 2020\3dsmaxbatch.exe"
 $AllowedVisualCandidateAlgorithm = "tutorial_centerline_qbird"
@@ -204,6 +205,62 @@ if ($null -ne $OrganizeResult -and $null -ne $OrganizeResult.assetRuns) {
     }
 }
 
+$RunSceneDir = Join-Path $RunDir "scene"
+New-Item -ItemType Directory -Force -Path $RunSceneDir | Out-Null
+
+function Move-AiraGeneratedFileToRunScene {
+    param(
+        [string]$PathValue
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathValue) -or -not (Test-Path -LiteralPath $PathValue -PathType Leaf)) {
+        return $PathValue
+    }
+
+    $Target = Join-Path $RunSceneDir ([System.IO.Path]::GetFileName($PathValue))
+    $SourceFull = [System.IO.Path]::GetFullPath($PathValue)
+    $TargetFull = [System.IO.Path]::GetFullPath($Target)
+    if ($SourceFull -ne $TargetFull) {
+        Move-Item -LiteralPath $PathValue -Destination $Target -Force
+    }
+    return $Target
+}
+
+function Move-AiraGeneratedDirectoryToRunScene {
+    param(
+        [string]$PathValue
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathValue) -or -not (Test-Path -LiteralPath $PathValue -PathType Container)) {
+        return $PathValue
+    }
+
+    $Target = Join-Path $RunSceneDir ([System.IO.Path]::GetFileName($PathValue))
+    $SourceFull = [System.IO.Path]::GetFullPath($PathValue)
+    $TargetFull = [System.IO.Path]::GetFullPath($Target)
+    if ($SourceFull -eq $TargetFull) {
+        return $Target
+    }
+
+    if (-not (Test-Path -LiteralPath $Target -PathType Container)) {
+        Move-Item -LiteralPath $PathValue -Destination $Target -Force
+    }
+    else {
+        Get-ChildItem -LiteralPath $PathValue -Force | ForEach-Object {
+            Move-Item -LiteralPath $_.FullName -Destination $Target -Force
+        }
+        Remove-Item -LiteralPath $PathValue -Force
+    }
+    return $Target
+}
+
+$MiscWorkingFbx = Join-Path (Join-Path $OutDir "misc") "$SafeAssetName.fbx"
+if ((-not (Test-Path -LiteralPath $WorkingFbx -PathType Leaf)) -and (Test-Path -LiteralPath $MiscWorkingFbx -PathType Leaf)) {
+    $WorkingFbx = $MiscWorkingFbx
+}
+$WorkingFbx = Move-AiraGeneratedFileToRunScene $WorkingFbx
+$TextureSidecar = Move-AiraGeneratedDirectoryToRunScene $TextureSidecar
+
 function Resolve-AiraOutputPath {
     param(
         [string]$SubDir,
@@ -374,6 +431,68 @@ if ((Test-Path -LiteralPath $SkinPrepGateScript) -and (Test-Path -LiteralPath $O
     $OrganizedSkinPrepGateMarkdown = Resolve-AiraOutputPath "reports" "$SafeAssetName`_stage01_skin_prep_gate.md" $SkinPrepGateMarkdown
 }
 
+$NumberedLayout = $null
+$LayoutVersion = "legacy_unordered"
+if ((Test-Path -LiteralPath $NumberedLayoutScript) -and (Test-Path -LiteralPath $RunDir)) {
+    if (-not (Test-Path -LiteralPath $Python)) {
+        $Python = "python"
+    }
+    $LayoutRaw = & $Python $NumberedLayoutScript --run-dir $RunDir --asset-name $SafeAssetName
+    $LayoutJoined = ($LayoutRaw | Out-String).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($LayoutJoined)) {
+        $NumberedLayout = $LayoutJoined | ConvertFrom-Json
+        $LayoutVersion = $NumberedLayout.layoutVersion
+    }
+}
+
+function Convert-AiraNumberedLayoutPath {
+    param(
+        [string]$PathValue
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return $PathValue
+    }
+    if ($null -eq $NumberedLayout -or $null -eq $NumberedLayout.legacyToNumbered) {
+        return $PathValue
+    }
+
+    foreach ($prop in $NumberedLayout.legacyToNumbered.PSObject.Properties) {
+        $LegacyDir = Join-Path $RunDir $prop.Name
+        $NumberedDir = [string]$prop.Value
+        if ($PathValue.StartsWith($LegacyDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return ($NumberedDir + $PathValue.Substring($LegacyDir.Length))
+        }
+    }
+    return $PathValue
+}
+
+$OrganizedWorkingFbx = Convert-AiraNumberedLayoutPath $OrganizedWorkingFbx
+$OrganizedTextureSidecar = Convert-AiraNumberedLayoutPath $OrganizedTextureSidecar
+$OrganizedScene = Convert-AiraNumberedLayoutPath $OrganizedScene
+$OrganizedSummary = Convert-AiraNumberedLayoutPath $OrganizedSummary
+$OrganizedBodyProfileJson = Convert-AiraNumberedLayoutPath $OrganizedBodyProfileJson
+$OrganizedBodyProfileMarkdown = Convert-AiraNumberedLayoutPath $OrganizedBodyProfileMarkdown
+$OrganizedFitQcJson = Convert-AiraNumberedLayoutPath $OrganizedFitQcJson
+$OrganizedFitQcMarkdown = Convert-AiraNumberedLayoutPath $OrganizedFitQcMarkdown
+$OrganizedVisualSnapshotJson = Convert-AiraNumberedLayoutPath $OrganizedVisualSnapshotJson
+$OrganizedVisualQcJson = Convert-AiraNumberedLayoutPath $OrganizedVisualQcJson
+$OrganizedVisualQcMarkdown = Convert-AiraNumberedLayoutPath $OrganizedVisualQcMarkdown
+$OrganizedVisualScreenshotDir = Convert-AiraNumberedLayoutPath $OrganizedVisualScreenshotDir
+$OrganizedTexturedScreenshotDir = Convert-AiraNumberedLayoutPath $OrganizedTexturedScreenshotDir
+$OrganizedWireBoneScreenshotDir = Convert-AiraNumberedLayoutPath $OrganizedWireBoneScreenshotDir
+$OrganizedRigDetailReviewJson = Convert-AiraNumberedLayoutPath $OrganizedRigDetailReviewJson
+$OrganizedRigDetailReviewMarkdown = Convert-AiraNumberedLayoutPath $OrganizedRigDetailReviewMarkdown
+$OrganizedVisualReviewManifest = Convert-AiraNumberedLayoutPath $OrganizedVisualReviewManifest
+$OrganizedVisualReviewInput = Convert-AiraNumberedLayoutPath $OrganizedVisualReviewInput
+$OrganizedVisualReviewSchema = Convert-AiraNumberedLayoutPath $OrganizedVisualReviewSchema
+$EffectiveVisualSignoffJson = Convert-AiraNumberedLayoutPath $EffectiveVisualSignoffJson
+$GeneratedVlmSignoffJson = Convert-AiraNumberedLayoutPath $GeneratedVlmSignoffJson
+$OrganizedSkinPrepGateJson = Convert-AiraNumberedLayoutPath $OrganizedSkinPrepGateJson
+$OrganizedSkinPrepGateMarkdown = Convert-AiraNumberedLayoutPath $OrganizedSkinPrepGateMarkdown
+$OrganizedRigAssetQcJson = Convert-AiraNumberedLayoutPath $OrganizedRigAssetQcJson
+$OrganizedRigAssetQcMarkdown = Convert-AiraNumberedLayoutPath $OrganizedRigAssetQcMarkdown
+
 [pscustomobject]@{
     ok = (Test-Path -LiteralPath $OrganizedFitQcJson)
     sourceFbx = $SourceFbx
@@ -383,7 +502,9 @@ if ((Test-Path -LiteralPath $SkinPrepGateScript) -and (Test-Path -LiteralPath $O
     guideAlgorithm = $GuideAlgorithm
     maxFitIterations = $MaxFitIterations
     organized = $Organized
+    layoutVersion = $LayoutVersion
     runDir = $RunDir
+    layoutManifest = Join-Path $RunDir "layout_manifest.json"
     scene = $OrganizedScene
     summary = $OrganizedSummary
     bodyProfileJson = $OrganizedBodyProfileJson

@@ -57,6 +57,7 @@ REQUIRED_SIGNOFF_CHECKS = [
     "topWrap",
     "textureLandmarkTrace",
     "crossSectionInsideVolume",
+    "legClothingOcclusion",
     "headTopSemantic",
     "leftHandDetail",
     "rightHandDetail",
@@ -176,7 +177,10 @@ def analyze(
     semantic_skin_blockers = [
         risk
         for risk in raw_semantic_skin_blockers
-        if not (risk.get("code") == "multiview_wrap_signoff_required" and multiview_signoff["ready"])
+        if not (
+            risk.get("code") in {"multiview_wrap_signoff_required", "leg_landmarks_may_be_clothing_occluded"}
+            and multiview_signoff["ready"]
+        )
     ]
     semantic_policy_ready = not semantic_skin_blockers
     semantic_skin_ready = semantic_policy_ready and multiview_signoff["ready"] and biped_fit_ready
@@ -310,7 +314,7 @@ def analyze(
         {
             "id": "confirm_leg_and_foot_pivots",
             "status": "done" if semantic_confirmed else "required",
-            "check": "Confirm hip, knee, ankle, rear-foot and toe/front-foot pivots match the model and bend direction in side/top views.",
+            "check": "Confirm hip, knee, ankle, rear-foot and toe/front-foot pivots match the model and bend direction in front/side/top views; for robe or skirt silhouettes, confirm the chain follows the hidden leg anatomy rather than the clothing edge.",
         },
         {
             "id": "confirm_arm_centerlines",
@@ -348,7 +352,7 @@ def analyze(
         {
             "id": "resolve_semantic_skin_blockers",
             "status": status(semantic_skin_ready),
-            "note": "Biped COM/Pelvis policy, head/crest visual split, hand detail and foot/toe pivots must be signed off before Skin.",
+            "note": "Biped COM/Pelvis policy, robe/leg occlusion, head/crest visual split, hand detail and foot/toe pivots must be signed off before Skin.",
         },
         {
             "id": "add_skin_modifier",

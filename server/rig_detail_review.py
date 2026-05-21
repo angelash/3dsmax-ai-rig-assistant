@@ -408,6 +408,17 @@ def semantic_skin_review(
             }
         )
 
+    leg_occlusion = (body_profile or {}).get("legOcclusion", {})
+    occlusion_likely = bool(leg_occlusion.get("occlusionLikely"))
+    if occlusion_likely or (body_type == "compact_q_bird_wide_body_short_legs" and size[0] / height >= 0.75 and size[1] / height >= 0.45):
+        add_risk(
+            "leg_landmarks_may_be_clothing_occluded",
+            "skin_blocker",
+            "human_or_vlm",
+            "Wide lower-body clothing can hide the true hip/knee/ankle chain; a mechanically fitted Biped may still be following the robe or skirt silhouette instead of the leg anatomy.",
+            "Use front, side and top wire-bone views plus foot crops and knee/ankle cross sections. Approve only if hips, knees and ankles follow the under-clothing leg chain and visible boot/foot pivots, not the garment edge.",
+        )
+
     skin_blocker_count = sum(1 for risk in risks if risk["severity"] == "skin_blocker")
     return {
         "mode": "semantic_skin_handoff_review",

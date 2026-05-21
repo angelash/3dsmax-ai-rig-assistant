@@ -27,6 +27,7 @@ Stage01 现在会在生成 Guide 前先做 mesh profile。旧的 `semantic_qbird
 - 检测最大横向展开所在高度，用于估计肩、肘、腕和手部区域。
 - 检测低位横向宽度，用于估计脚掌区域。
 - 使用 5/95 分位轮廓估计外轮廓，使用 25/75 分位轮廓估计主体宽度，减少装饰件和外展肢体对躯干关节点的干扰。
+- 比较下半身衣服体积和可见脚掌体积；如果宽袍、裙摆、披风或靴筒显著大于脚掌带宽，标记 `legOcclusion.occlusionLikely=true`，腿部 Guide 使用隐藏腿轴线，不追衣服外轮廓。
 - `tutorial_centerline_qbird` 会在教程顺序基础上把手、肩、肘、腕放到局部肢体截面的修剪中心线，避免骨骼贴在点云表面。
 - 给出体型标签，例如 `compact_q_bird_wide_body_short_legs`。
 
@@ -158,7 +159,7 @@ Biped 的肩、肘、胯、膝、踝等节点会受 Character Studio Figure Mode
 
 这一步仍不产生分数，只服务于语义 blocker 判断：Biped COM/Pelvis 是否只做控制轴、HeadTop 是否是冠饰、手部是否需要 Biped 手指/细节结构、脚掌 pivot 是否能从 side/top 视图确认。
 
-Skin 前置门会把 `visual_review/semantic_visual_review_template.json` 或同 schema 的 VLM 输出作为硬输入。必要检查包括 `frontWrap`、`sideWrap`、`topWrap`、`rootPelvisPolicy`、`crossSectionInsideVolume`、左右手和左右脚 pivot。缺失、不确定、needs_detail 或 blocker 都会阻断 Stage01 handoff。
+Skin 前置门会把 `visual_review/semantic_visual_review_template.json` 或同 schema 的 VLM 输出作为硬输入。必要检查包括 `frontWrap`、`sideWrap`、`topWrap`、`rootPelvisPolicy`、`crossSectionInsideVolume`、`legClothingOcclusion`、左右手和左右脚 pivot。缺失、不确定、needs_detail 或 blocker 都会阻断 Stage01 handoff。
 
 `server/vlm_multiview_review.py` 是可选自动复核器。它读取 `visual_review/*_visual_evidence_manifest.json`、`review_input.md` 和 `review_schema.json`，把多视图证据图发给视觉大模型，输出 `*_semantic_visual_review_vlm.json`。这个 JSON 不绕过规则；最终仍由 `stage01_skin_prep_gate.py` 校验完整 schema、推荐值、必填检查项和 Biped fit。
 

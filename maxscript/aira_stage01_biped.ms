@@ -279,6 +279,10 @@ struct AIRAStage01Tool
         local semanticFootHalf = width * 0.11
         local semanticFootY = footY
         local semanticToeY = toeY
+        local semanticLowerRobeWidth = 0.0
+        local semanticLowerRobeDepth = 0.0
+        local semanticLowerRobeY = center.y
+        local semanticLegOcclusionRisk = false
 
         for i = 1 to sliceCount do
         (
@@ -293,7 +297,9 @@ struct AIRAStage01Tool
                 local x95 = percentileValue xVals[i] 0.95 xMaxs[i]
                 local y05 = percentileValue yVals[i] 0.05 yMins[i]
                 local y50 = percentileValue yVals[i] 0.50 center.y
+                local y95 = percentileValue yVals[i] 0.95 yMaxs[i]
                 local robustWidth = x95 - x05
+                local robustDepth = y95 - y05
                 local coreWidth = x75 - x25
                 if sliceWidth > maxWidth do
                 (
@@ -331,6 +337,12 @@ struct AIRAStage01Tool
                     semanticFootHalf = robustWidth * 0.22
                     semanticFootY = y50
                     semanticToeY = y05
+                )
+                if sliceRatio >= 0.16 and sliceRatio <= 0.34 and robustWidth > semanticLowerRobeWidth do
+                (
+                    semanticLowerRobeWidth = robustWidth
+                    semanticLowerRobeDepth = robustDepth
+                    semanticLowerRobeY = y50
                 )
             )
         )
@@ -381,6 +393,8 @@ struct AIRAStage01Tool
         if depthHeightRatio >= 0.45 do append notes "Deep body volume; side-view thickness should be considered when placing pelvis/chest guides."
         if armRatio < 0.48 or armRatio > 0.68 do append notes ("Detected arm-span height is unusual: " + (armRatio as string))
         if semanticMaxWidth < maxWidth * 0.80 do append notes "Robust percentile width differs from raw max width; accessories or separated parts may affect raw silhouette."
+        semanticLegOcclusionRisk = (bodyType == "compact_q_bird_wide_body_short_legs") and (semanticLowerRobeWidth > (semanticFootHalf * 3.0))
+        if semanticLegOcclusionRisk do append notes "Lower-body garment/robe silhouette is much wider than the visible foot span; leg landmarks must be placed by under-clothing anatomy, not the garment edge."
         append notes "Initial landmark estimates are mesh-profile based, not final anatomical proof."
 
         #(
@@ -394,7 +408,8 @@ struct AIRAStage01Tool
             semanticFootY, semanticToeY, semanticArmRatio, semanticMaxWidth, semanticMaxWidthRatio,
             semanticCoreHalf,
             semanticWaistY, semanticTorsoY, semanticUpperY, semanticHeadY, semanticHeadTopY,
-            semanticCrestX, semanticCrestY
+            semanticCrestX, semanticCrestY,
+            semanticLowerRobeWidth, semanticLowerRobeDepth, semanticLowerRobeY, semanticLegOcclusionRisk
         )
     ),
 
@@ -643,6 +658,7 @@ struct AIRAStage01Tool
         local headTopYProfile = if profile.count >= 46 then profile[46] else headYProfile
         local crestX = if profile.count >= 47 then profile[47] else cx
         local crestY = if profile.count >= 48 then profile[48] else headTopYProfile
+        local legOcclusionRisk = if profile.count >= 52 then profile[52] else false
         local visualCenter = [cx, torsoY, center.z]
 
         local shoulderHalf = profile[17]
@@ -653,6 +669,9 @@ struct AIRAStage01Tool
         local yFoot = profile[21]
         local yToe = profile[22]
         local xHip = cx + footHalf * 0.90
+        local legHipHalf = footHalf * 0.90
+        local legKneeHalf = footHalf * 0.82
+        local legAnkleHalf = footHalf
         local xShoulder = cx + shoulderHalf
         local xElbow = cx + elbowHalf
         local xWrist = cx + wristHalf
@@ -729,7 +748,19 @@ struct AIRAStage01Tool
             footHalf = profile[35]
             yFoot = profile[36]
             yToe = profile[37]
-            xHip = cx + footHalf * 0.68
+            legHipHalf = footHalf * 0.68
+            legKneeHalf = footHalf * 0.82
+            legAnkleHalf = footHalf
+            if legOcclusionRisk do
+            (
+                -- A robe/skirt can make the leg silhouette look much wider than
+                -- the hidden leg chain. Keep the thigh/knee under the garment
+                -- and use the visible foot mass only for the distal pivot.
+                legHipHalf = footHalf * 0.42
+                legKneeHalf = footHalf * 0.62
+                legAnkleHalf = footHalf * 0.86
+            )
+            xHip = cx + legHipHalf
             xShoulder = cx + shoulderHalf
             xElbow = cx + elbowHalf
             xWrist = cx + wristHalf
@@ -769,7 +800,18 @@ struct AIRAStage01Tool
             footHalf = profile[35]
             yFoot = profile[36]
             yToe = profile[37]
-            xHip = cx + footHalf * 0.68
+            legHipHalf = footHalf * 0.68
+            legKneeHalf = footHalf * 0.82
+            legAnkleHalf = footHalf
+            if legOcclusionRisk do
+            (
+                -- In the tutorial workflow this is where a rigger ignores the
+                -- robe/skirt outline and keeps the leg chain under the body.
+                legHipHalf = footHalf * 0.42
+                legKneeHalf = footHalf * 0.62
+                legAnkleHalf = footHalf * 0.86
+            )
+            xHip = cx + legHipHalf
             xShoulder = cx + shoulderHalf
             xElbow = cx + elbowHalf
             xWrist = cx + wristHalf
@@ -851,7 +893,18 @@ struct AIRAStage01Tool
             footHalf = profile[35]
             yFoot = profile[36]
             yToe = profile[37]
-            xHip = cx + footHalf * 0.68
+            legHipHalf = footHalf * 0.68
+            legKneeHalf = footHalf * 0.82
+            legAnkleHalf = footHalf
+            if legOcclusionRisk do
+            (
+                -- In the tutorial workflow this is where a rigger ignores the
+                -- robe/skirt outline and keeps the leg chain under the body.
+                legHipHalf = footHalf * 0.42
+                legKneeHalf = footHalf * 0.62
+                legAnkleHalf = footHalf * 0.86
+            )
+            xHip = cx + legHipHalf
             xShoulder = cx + shoulderHalf
             xElbow = cx + elbowHalf
             xWrist = cx + wristHalf
@@ -903,8 +956,8 @@ struct AIRAStage01Tool
 
             lClaviclePos = [cx + ((lShoulderPos.x - cx) * 0.42), (torsoY + lShoulderPos.y) / 2.0, lShoulderPos.z + h * 0.035]
             rClaviclePos = [cx + ((rShoulderPos.x - cx) * 0.42), (torsoY + rShoulderPos.y) / 2.0, rShoulderPos.z + h * 0.035]
-            lHeelPos = [cx + footHalf, heelGuideY, footZ]
-            rHeelPos = [cx - footHalf, heelGuideY, footZ]
+            lHeelPos = [cx + legAnkleHalf, heelGuideY, footZ]
+            rHeelPos = [cx - legAnkleHalf, heelGuideY, footZ]
         )
 
         #(
@@ -923,12 +976,12 @@ struct AIRAStage01Tool
             #("L_Wrist",     lWristPos, green),
             #("L_Hand",      lHandPos, green),
             #("L_HandTip",   lHandTipPos, green),
-            #("L_Hip",       [xHip, waistY, hipZ], green),
-            #("L_Knee",      [cx + footHalf * 0.82, ((waistY + yFoot) / 2.0), kneeZ], green),
-            #("L_Ankle",     [cx + footHalf, yFoot, ankleZ], green),
+            #("L_Hip",       [cx + legHipHalf, waistY, hipZ], green),
+            #("L_Knee",      [cx + legKneeHalf, ((waistY + yFoot) / 2.0), kneeZ], green),
+            #("L_Ankle",     [cx + legAnkleHalf, yFoot, ankleZ], green),
             #("L_Heel",      lHeelPos, green),
-            #("L_Foot",      [cx + footHalf, yFoot, footZ], green),
-            #("L_Toe",       [cx + footHalf, yToe, toeZ], green),
+            #("L_Foot",      [cx + legAnkleHalf, yFoot, footZ], green),
+            #("L_Toe",       [cx + legAnkleHalf, yToe, toeZ], green),
 
             #("R_Clavicle",  rClaviclePos, blue),
             #("R_Shoulder",  rShoulderPos, blue),
@@ -936,12 +989,12 @@ struct AIRAStage01Tool
             #("R_Wrist",     rWristPos, blue),
             #("R_Hand",      rHandPos, blue),
             #("R_HandTip",   rHandTipPos, blue),
-            #("R_Hip",       [cx - footHalf * 0.90, waistY, hipZ], blue),
-            #("R_Knee",      [cx - footHalf * 0.82, ((waistY + yFoot) / 2.0), kneeZ], blue),
-            #("R_Ankle",     [cx - footHalf, yFoot, ankleZ], blue),
+            #("R_Hip",       [cx - legHipHalf, waistY, hipZ], blue),
+            #("R_Knee",      [cx - legKneeHalf, ((waistY + yFoot) / 2.0), kneeZ], blue),
+            #("R_Ankle",     [cx - legAnkleHalf, yFoot, ankleZ], blue),
             #("R_Heel",      rHeelPos, blue),
-            #("R_Foot",      [cx - footHalf, yFoot, footZ], blue),
-            #("R_Toe",       [cx - footHalf, yToe, toeZ], blue)
+            #("R_Foot",      [cx - legAnkleHalf, yFoot, footZ], blue),
+            #("R_Toe",       [cx - legAnkleHalf, yToe, toeZ], blue)
         )
     ),
 
@@ -2017,7 +2070,14 @@ struct AIRAStage01Tool
         format "    \"semanticWristHalfSpan\": %, \n" (jsonNumber profile[34]) to:fp
         format "    \"semanticFootHalfSpan\": %, \n" (jsonNumber profile[35]) to:fp
         format "    \"semanticMaxWidth\": %, \n" (jsonNumber profile[39]) to:fp
-        format "    \"semanticMaxWidthZRatio\": %\n" (jsonNumber profile[40]) to:fp
+        format "    \"semanticMaxWidthZRatio\": %, \n" (jsonNumber profile[40]) to:fp
+        format "    \"lowerRobeWidth\": %, \n" (jsonNumber (if profile.count >= 49 then profile[49] else 0.0)) to:fp
+        format "    \"lowerRobeDepth\": %\n" (jsonNumber (if profile.count >= 50 then profile[50] else 0.0)) to:fp
+        format "  },\n" to:fp
+        format "  \"legOcclusion\": {\n" to:fp
+        format "    \"occlusionLikely\": %, \n" (jsonBool (if profile.count >= 52 then profile[52] else false)) to:fp
+        format "    \"mode\": %, \n" (jsonString (if (profile.count >= 52 and profile[52]) then "under_clothing_short_leg_template" else "visible_silhouette_centerline")) to:fp
+        format "    \"lowerRobeCenterY\": %\n" (jsonNumber (if profile.count >= 51 then profile[51] else 0.0)) to:fp
         format "  },\n" to:fp
         format "  \"notes\": %\n" (jsonStringArray notes) to:fp
         format "}\n" to:fp
@@ -2044,6 +2104,8 @@ struct AIRAStage01Tool
         format "- Semantic shoulder / elbow / wrist half span: `% / % / %`\n" profile[32] profile[33] profile[34] to:fp
         format "- Semantic foot half span: `%`\n" profile[35] to:fp
         format "- Semantic max width / Z ratio: `% / %`\n" profile[39] profile[40] to:fp
+        format "- Lower robe width / depth: `% / %`\n" (if profile.count >= 49 then profile[49] else 0.0) (if profile.count >= 50 then profile[50] else 0.0) to:fp
+        format "- Leg occlusion likely: `%`\n" (if profile.count >= 52 then profile[52] else false) to:fp
         format "- Side depth centers waist / torso / upper / head / headTop Y: `% / % / % / % / %`\n" profile[42] profile[43] profile[44] profile[45] profile[46] to:fp
         format "- Accessory crest reference X / Y: `% / %`\n" profile[47] profile[48] to:fp
         format "\n## Notes\n\n" to:fp

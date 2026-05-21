@@ -23,7 +23,7 @@
 | Validate / Report | 检查缺失 Guide、左右对称问题，并生成 Markdown 报告 |
 | Save Stage01 File | 另存一个 `_stage01_biped.max` 工作文件 |
 
-离线批处理还会执行 Biped fit refinement loop：根据 Fit QC 偏差反复缩放 Biped 段长并重新定位，直到机械拟合收敛或达到上限。这个循环只解决 Biped 对 Guide 的机械一致性，不能替代 front/side/top 包裹性签核。
+离线批处理还会执行 Biped fit refinement loop：根据 Fit QC 偏差反复缩放 Biped 段长并重新定位，直到机械拟合收敛或达到上限。这个循环只解决 Biped 对 Guide 的机械一致性，不能替代 front/side/top 包裹性签核。对宽袍、裙摆、披风或靴筒遮挡腿的角色，Guide 生成会降权衣服外轮廓，用更保守的隐藏腿模板放 Hip/Knee/Ankle；视觉签核也必须确认腿链没有追衣服边。
 
 ## 使用流程
 

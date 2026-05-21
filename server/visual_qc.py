@@ -403,6 +403,55 @@ def arm_band_target(
     }
 
 
+def robust_axis_span(points: list[Point3], axis: int, fallback: float = 0.0) -> float:
+    if not points:
+        return fallback
+    values = [point[axis] for point in points]
+    return max(0.0, percentile(values, 0.95, fallback) - percentile(values, 0.05, fallback))
+
+
+def leg_clothing_occlusion_analysis(bounds: dict[str, Point3], mesh_points: list[Point3]) -> dict[str, Any]:
+    center = bounds["center"]
+    size = bounds["size"]
+    height = max(size[2], 1.0)
+    width = max(size[0], 1.0)
+    depth = max(size[1], 1.0)
+    z0 = bounds["min"][2]
+
+    foot_band: list[Point3] = []
+    lower_garment_band: list[Point3] = []
+    for point in mesh_points:
+        z_ratio = (point[2] - z0) / height
+        if 0.02 <= z_ratio <= 0.14:
+            foot_band.append(point)
+        elif 0.16 <= z_ratio <= 0.34:
+            lower_garment_band.append(point)
+
+    foot_width = robust_axis_span(foot_band, 0, width * 0.20)
+    garment_width = robust_axis_span(lower_garment_band, 0, width * 0.45)
+    garment_depth = robust_axis_span(lower_garment_band, 1, depth * 0.45)
+    semantic_foot_half = foot_width * 0.22
+    ratio = garment_width / max(semantic_foot_half, 1.0)
+    occlusion_likely = width / height >= 0.75 and depth / height >= 0.45 and ratio >= 3.0
+
+    return {
+        "mode": "lower_body_garment_vs_visible_foot_band",
+        "occlusionLikely": occlusion_likely,
+        "footBandPointCount": len(foot_band),
+        "lowerGarmentPointCount": len(lower_garment_band),
+        "visibleFootWidth": round(foot_width, 6),
+        "semanticFootHalfWidth": round(semantic_foot_half, 6),
+        "lowerGarmentWidth": round(garment_width, 6),
+        "lowerGarmentDepth": round(garment_depth, 6),
+        "garmentToFootWidthRatio": round(ratio, 6),
+        "note": (
+            "Lower garment width is much larger than the visible foot band; leg guides should follow under-clothing anatomy and side/top foot evidence, not the robe silhouette."
+            if occlusion_likely
+            else "No strong robe/skirt occlusion signal was detected from local point-cloud bands."
+        ),
+    }
+
+
 def add_issue(issues: list[dict[str, Any]], severity: str, code: str, message: str, guide: str | None = None) -> None:
     issues.append({"severity": severity, "code": code, "message": message, "guide": guide or ""})
 
@@ -421,6 +470,7 @@ def analyze(snapshot: dict[str, Any]) -> dict[str, Any]:
     guide_distances: dict[str, dict[str, float]] = {}
     hand_coverage: dict[str, dict[str, Any]] = {}
     arm_coverage: dict[str, dict[str, Any]] = {}
+    leg_occlusion = leg_clothing_occlusion_analysis(bounds, mesh_points) if mesh_points else {}
 
     observations.append(
         f"Silhouette ratios: width/height={width / height:.3f}, depth/height={depth / height:.3f}."
@@ -429,6 +479,15 @@ def analyze(snapshot: dict[str, Any]) -> dict[str, Any]:
         observations.append("Visual silhouette is compact and wide; standard humanoid proportions are a weak fit.")
     if depth / height >= 0.45:
         observations.append("Side silhouette is deep; pelvis and chest need side-view checking.")
+    if leg_occlusion.get("occlusionLikely"):
+        observations.append("Lower-body clothing likely hides the true leg chain; leg landmarks require side/top and foot-band confirmation.")
+        add_issue(
+            issues,
+            "warning",
+            "leg_landmarks_clothing_occluded",
+            "Lower-body garment width is much larger than the visible foot band; do not accept leg guides that follow the clothing silhouette.",
+            "L_Knee",
+        )
 
     required = [
         "Root",
@@ -681,6 +740,7 @@ def analyze(snapshot: dict[str, Any]) -> dict[str, Any]:
         "guideProjectedDistances": guide_distances,
         "handCoverage": hand_coverage,
         "armCoverage": arm_coverage,
+        "legOcclusion": leg_occlusion,
         "semanticWarning": "This is local 2D silhouette QC, not a vision-language model verdict. Use exported screenshots for human or VLM review before skinning.",
     }
 
@@ -751,6 +811,17 @@ def main() -> int:
             lines.append(
                 f"- {name}: diagnostic distance `{coverage['distance']}`, target `{coverage['target']}`"
             )
+    else:
+        lines.append("- None")
+    lines += ["", "## Leg Clothing Occlusion", ""]
+    leg_occlusion_md = qc.get("legOcclusion") or {}
+    if leg_occlusion_md:
+        lines.append(f"- Occlusion likely: `{leg_occlusion_md.get('occlusionLikely')}`")
+        lines.append(f"- Garment / foot width ratio: `{leg_occlusion_md.get('garmentToFootWidthRatio')}`")
+        lines.append(f"- Visible foot width: `{leg_occlusion_md.get('visibleFootWidth')}`")
+        lines.append(f"- Semantic foot half width: `{leg_occlusion_md.get('semanticFootHalfWidth')}`")
+        lines.append(f"- Lower garment width: `{leg_occlusion_md.get('lowerGarmentWidth')}`")
+        lines.append(f"- Note: {leg_occlusion_md.get('note')}")
     else:
         lines.append("- None")
     lines += ["", "## Issues", ""]

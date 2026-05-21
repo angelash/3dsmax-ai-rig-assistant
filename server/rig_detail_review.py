@@ -307,6 +307,14 @@ def semantic_skin_review(
             }
         )
 
+    add_risk(
+        "multiview_wrap_signoff_required",
+        "skin_blocker",
+        "human_or_vlm",
+        "Generated guides and numeric Biped diagnostics do not prove front/side/top wrapping. A rigger or VLM must inspect the wire-bone views before Skin setup.",
+        "Review front, side and top wire-bone screenshots plus pelvis, hand and foot crops. Approve only when the Biped centerline, limb pivots and foot/toe direction sit inside the visible model volume in all relevant views.",
+    )
+
     root = guide("Root")
     pelvis = guide("Pelvis")
     if root and pelvis:

@@ -873,6 +873,9 @@ def review_schema() -> dict[str, Any]:
                 "additionalProperties": False,
                 "required": [
                     "rootPelvisPolicy",
+                    "frontWrap",
+                    "sideWrap",
+                    "topWrap",
                     "textureLandmarkTrace",
                     "crossSectionInsideVolume",
                     "headTopSemantic",
@@ -884,6 +887,9 @@ def review_schema() -> dict[str, Any]:
                 ],
                 "properties": {
                     "rootPelvisPolicy": check_schema,
+                    "frontWrap": check_schema,
+                    "sideWrap": check_schema,
+                    "topWrap": check_schema,
                     "textureLandmarkTrace": check_schema,
                     "crossSectionInsideVolume": check_schema,
                     "headTopSemantic": check_schema,
@@ -914,6 +920,9 @@ def review_template(asset_name: str, images: dict[str, str]) -> dict[str, Any]:
         "reviewedAt": "",
         "checks": {
             "rootPelvisPolicy": check(images.get("pelvis_front", ""), images.get("pelvis_side", ""), images.get("wire_bone_side", "")),
+            "frontWrap": check(images.get("wire_bone_front", ""), images.get("full_front", ""), images.get("texture_wire_compare_front", "")),
+            "sideWrap": check(images.get("wire_bone_side", ""), images.get("full_side", ""), images.get("texture_wire_compare_side", "")),
+            "topWrap": check(images.get("wire_bone_top", ""), images.get("full_top", ""), images.get("texture_wire_compare_top", "")),
             "textureLandmarkTrace": check(
                 images.get("semantic_textured_front", ""),
                 images.get("texture_wire_compare_front", ""),
@@ -1194,6 +1203,9 @@ def write_review_input(
         "",
         "## Required review questions",
         "",
+        "- Front wrap: confirm the centerline chain and both arms/legs sit inside the front silhouette and follow the visible limb centers.",
+        "- Side wrap: confirm torso, pelvis, knees, ankles, feet and head are inside the side-view volume, not floating in front of or behind the mesh.",
+        "- Top wrap: confirm shoulders, hands, pelvis, knees, feet and toe direction are inside the top-view footprint and follow the model depth.",
         "- Biped COM/Pelvis: confirm COM is at the visual waist and control-only, and Pelvis starts body deformation.",
         "- Texture trace: confirm the cyan belt/waist texture search evidence and the paired real wire/bone view support the Biped COM/Pelvis placement, or mark uncertain/blocker.",
         "- Cross sections: confirm high-risk slices show bone centers inside the local body volume and display thickness is reasonable.",

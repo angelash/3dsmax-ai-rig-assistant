@@ -106,11 +106,11 @@ F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage01_fbx.ps1 -Source
 
 Stage01 会先从 mesh 顶点做高度切片，识别宽高比、深高比、最大横向展开高度和短腿比例，再生成一套视觉候选 Guide。当前只保留 `tutorial_centerline_qbird` 作为候选生成器：它按 `BV1ftReBYEg3-01-biped-skeleton-and-matching` 的教程顺序先定身体/腿/躯干，再把手、肩、肘、腕放到局部肢体截面的修剪中心线，而不是贴到点云外表面。它不是“评分推荐算法”，只负责模拟人工看前/侧/顶视图校准 Biped 关节点；场景和 Skin 准备流程只使用 Biped，不生成普通 Bones 模板骨链。详见 `docs/bone-fit-qc-method.md`。
 
-`rig_detail_review.py` 除了逐骨诊断，还会输出 Semantic Skin Review：例如 Biped COM 是否只能作为控制轴、HeadTop 是否可能被冠/头饰极值拉偏、单块手部是否需要 Biped 手指/细节结构、脚掌/Toe 是否必须用 side/top 视图签核。`stage01_skin_prep_gate.py` 会把 Biped 贴合输出、视觉截图、逐骨诊断、Semantic Skin Review 和资产 QC 合并成 Skin 前置报告。当前 `tutorial_centerline_qbird` 可以形成 Stage01 视觉候选，但 `semanticSkinReady=false` 且 `productionReady=false`：原因是语义 Skin 阻塞项还没有处理，场景也还未添加 Skin、权重和变形测试。
+`rig_detail_review.py` 除了逐骨诊断，还会输出 Semantic Skin Review：例如 Biped COM 是否只能作为控制轴、HeadTop 是否可能被冠/头饰极值拉偏、单块手部是否需要 Biped 手指/细节结构、脚掌/Toe 是否必须用 side/top 视图签核。`stage01_skin_prep_gate.py` 会把 Biped 贴合输出、视觉截图、逐骨诊断、Semantic Skin Review、front/side/top 包裹性签核和资产 QC 合并成 Skin 前置报告。当前 `tutorial_centerline_qbird` 只能形成 Stage01 视觉候选；没有人或 VLM 填写并通过 `visual_review/semantic_visual_review_template.json` 前，`semanticSkinReady=false`、`stage01HandoffReady=false`、`productionReady=false`。
 
 视觉自检当前是本地 2D 轮廓投影，不是外部视觉大模型：MaxScript 导出 mesh 点云、Guide 和 Biped 节点/骨段，`visual_qc.py` 生成前/侧/顶 PNG，并检查视觉轮廓比例、Guide 顺序、对称性、离轮廓距离、手部中心线覆盖和手臂截面中心线覆盖。截图里的红色/紫色十字是视觉目标点，连线是 guide 到目标的偏差。
 
-`visual_review_pack.py` 会在 run 内生成 `visual_review/`：`full/` 保存全局前/侧/顶证据图，`regions/` 保存 head、pelvis、left/right hand、left/right foot 的局部裁剪，`review_input.md` 和 `review_schema.json` 用于人工或 VLM 做结构化语义审查。它只输出 blocker/pass/uncertain 这类审查项，不输出分数。
+`visual_review_pack.py` 会在 run 内生成 `visual_review/`：`full/` 保存全局前/侧/顶证据图，`regions/` 保存 head、pelvis、left/right hand、left/right foot 的局部裁剪，`review_input.md` 和 `review_schema.json` 用于人工或 VLM 做结构化语义审查。它只输出 blocker/pass/uncertain 这类审查项，不输出分数。硬规则是：frontWrap、sideWrap、topWrap、rootPelvisPolicy、footPivot 等必要检查没有全部 `pass`，不得进入 Skin。规则细节见 `docs/stage01-biped-multiview-signoff.md`。
 
 整理已有输出目录：
 
@@ -139,6 +139,7 @@ F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspac
 - `tutorial_centerline_qbird` 生成的视觉候选骨架。
 - front / side / top 截图和视角索引。
 - Semantic Skin Review 中的语义阻塞项。
+- 人工或 VLM 对 front / side / top 包裹性的结构化签核。
 - 人工语义确认、Skin、权重和变形测试。
 
 旧 JSON 里的 `mechanicalScore`、`visualScore`、`detailScore`、`qualityScore` 等字段只保留为兼容诊断数据，不再展示为推荐依据，也不能让 `productionReady` 变成 true。

@@ -7,6 +7,12 @@ param(
     [ValidateSet("bbox_humanoid", "mesh_profile", "qbird_profile", "semantic_qbird", "visual_semantic_qbird", "tutorial_visual_qbird", "tutorial_centerline_qbird")]
     [string]$GuideAlgorithm = "tutorial_centerline_qbird",
 
+    [string]$VisualSignoffJson = "",
+
+    [switch]$SkipVlmReview,
+
+    [string]$VlmReviewModel = "",
+
     [string]$OutDir = ""
 )
 
@@ -17,6 +23,7 @@ $ToolRoot = "F:\workspace\github\3dsmax-ai-rig-assistant"
 $BatchScript = Join-Path $ToolRoot "maxscript\batch_stage01_fbx_test.ms"
 $VisualQcScript = Join-Path $ToolRoot "server\visual_qc.py"
 $VisualReviewPackScript = Join-Path $ToolRoot "server\visual_review_pack.py"
+$VlmReviewScript = Join-Path $ToolRoot "server\vlm_multiview_review.py"
 $RigDetailReviewScript = Join-Path $ToolRoot "server\rig_detail_review.py"
 $SkinPrepGateScript = Join-Path $ToolRoot "server\stage01_skin_prep_gate.py"
 $OrganizeOutScript = Join-Path $ToolRoot "server\organize_out_dir.py"
@@ -258,6 +265,104 @@ if (-not (Test-Path -LiteralPath $OrganizedWireBoneScreenshotDir)) {
     $OrganizedWireBoneScreenshotDir = $WireBoneScreenshotDir
 }
 
+$EffectiveVisualSignoffJson = ""
+$GeneratedVlmSignoffJson = ""
+$VlmReviewStatus = "not_requested"
+$VlmReviewMessage = ""
+
+if (-not [string]::IsNullOrWhiteSpace($VisualSignoffJson)) {
+    if (-not (Test-Path -LiteralPath $VisualSignoffJson)) {
+        throw "Visual signoff JSON not found: $VisualSignoffJson"
+    }
+    $EffectiveVisualSignoffJson = (Resolve-Path -LiteralPath $VisualSignoffJson).Path
+    $VlmReviewStatus = "external_signoff_used"
+    $VlmReviewMessage = "Using caller-provided visual signoff JSON."
+}
+elseif ($SkipVlmReview.IsPresent) {
+    $VlmReviewStatus = "skipped"
+    $VlmReviewMessage = "SkipVlmReview was set."
+}
+elseif (-not (Test-Path -LiteralPath $VlmReviewScript)) {
+    $VlmReviewStatus = "skipped"
+    $VlmReviewMessage = "VLM review script is missing."
+}
+elseif (-not (Test-Path -LiteralPath $OrganizedVisualReviewManifest)) {
+    $VlmReviewStatus = "skipped"
+    $VlmReviewMessage = "Visual review manifest is missing."
+}
+elseif ([string]::IsNullOrWhiteSpace($env:OPENAI_API_KEY)) {
+    $VlmReviewStatus = "skipped"
+    $VlmReviewMessage = "OPENAI_API_KEY is not set."
+}
+else {
+    try {
+        if (-not (Test-Path -LiteralPath $Python)) {
+            $Python = "python"
+        }
+        $VisualReviewDir = Join-Path $RunDir "visual_review"
+        New-Item -ItemType Directory -Force -Path $VisualReviewDir | Out-Null
+        $GeneratedVlmSignoffJson = Join-Path $VisualReviewDir "$SafeAssetName`_semantic_visual_review_vlm.json"
+        $VlmArgs = @(
+            $VlmReviewScript,
+            "--manifest-json", $OrganizedVisualReviewManifest,
+            "--out-json", $GeneratedVlmSignoffJson
+        )
+        if (Test-Path -LiteralPath $OrganizedVisualReviewInput) {
+            $VlmArgs += @("--review-input", $OrganizedVisualReviewInput)
+        }
+        if (Test-Path -LiteralPath $OrganizedVisualReviewSchema) {
+            $VlmArgs += @("--schema-json", $OrganizedVisualReviewSchema)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($VlmReviewModel)) {
+            $VlmArgs += @("--model", $VlmReviewModel)
+        }
+
+        & $Python @VlmArgs | Out-Null
+        if (Test-Path -LiteralPath $GeneratedVlmSignoffJson) {
+            $EffectiveVisualSignoffJson = $GeneratedVlmSignoffJson
+            $VlmReviewStatus = "completed"
+            $VlmReviewMessage = "VLM visual signoff JSON generated."
+        }
+        else {
+            $VlmReviewStatus = "failed"
+            $VlmReviewMessage = "VLM review finished without writing signoff JSON."
+        }
+    }
+    catch {
+        $VlmReviewStatus = "failed"
+        $VlmReviewMessage = $_.Exception.Message
+    }
+}
+
+if ((Test-Path -LiteralPath $SkinPrepGateScript) -and (Test-Path -LiteralPath $OrganizedFitQcJson)) {
+    if (-not (Test-Path -LiteralPath $Python)) {
+        $Python = "python"
+    }
+    $FinalGateDataDir = Join-Path $RunDir "data"
+    $FinalGateReportDir = Join-Path $RunDir "reports"
+    New-Item -ItemType Directory -Force -Path $FinalGateDataDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $FinalGateReportDir | Out-Null
+
+    $SkinGateArgs = @(
+        $SkinPrepGateScript,
+        "--asset-name", $SafeAssetName,
+        "--body-profile-json", $OrganizedBodyProfileJson,
+        "--biped-fit-qc-json", $OrganizedFitQcJson,
+        "--visual-qc-json", $OrganizedVisualQcJson,
+        "--rig-detail-review-json", $OrganizedRigDetailReviewJson,
+        "--rig-asset-qc-json", $OrganizedRigAssetQcJson,
+        "--out-dir", $FinalGateDataDir,
+        "--md-out-dir", $FinalGateReportDir
+    )
+    if (-not [string]::IsNullOrWhiteSpace($EffectiveVisualSignoffJson)) {
+        $SkinGateArgs += @("--visual-signoff-json", $EffectiveVisualSignoffJson)
+    }
+
+    & $Python @SkinGateArgs | Out-Null
+    $OrganizedSkinPrepGateJson = Resolve-AiraOutputPath "data" "$SafeAssetName`_stage01_skin_prep_gate.json" $SkinPrepGateJson
+    $OrganizedSkinPrepGateMarkdown = Resolve-AiraOutputPath "reports" "$SafeAssetName`_stage01_skin_prep_gate.md" $SkinPrepGateMarkdown
+}
+
 [pscustomobject]@{
     ok = (Test-Path -LiteralPath $OrganizedFitQcJson)
     sourceFbx = $SourceFbx
@@ -284,6 +389,10 @@ if (-not (Test-Path -LiteralPath $OrganizedWireBoneScreenshotDir)) {
     visualReviewManifest = $OrganizedVisualReviewManifest
     visualReviewInput = $OrganizedVisualReviewInput
     visualReviewSchema = $OrganizedVisualReviewSchema
+    visualSignoffJson = $EffectiveVisualSignoffJson
+    vlmReviewJson = $GeneratedVlmSignoffJson
+    vlmReviewStatus = $VlmReviewStatus
+    vlmReviewMessage = $VlmReviewMessage
     stage01SkinPrepGateJson = $OrganizedSkinPrepGateJson
     stage01SkinPrepGateMarkdown = $OrganizedSkinPrepGateMarkdown
     rigAssetQcJson = $OrganizedRigAssetQcJson

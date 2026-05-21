@@ -78,10 +78,10 @@ SLICE_SEGMENTS = [
     ("Neck", "Head"),
     ("L_Hip", "L_Knee"),
     ("L_Knee", "L_Ankle"),
-    ("L_Foot", "L_Toe"),
+    ("L_Ankle", "L_Toe"),
     ("R_Hip", "R_Knee"),
     ("R_Knee", "R_Ankle"),
-    ("R_Foot", "R_Toe"),
+    ("R_Ankle", "R_Toe"),
 ]
 
 
@@ -943,8 +943,8 @@ def review_template(asset_name: str, images: dict[str, str]) -> dict[str, Any]:
             ),
             "leftHandDetail": check(images.get("left_hand_front", ""), images.get("left_hand_top", "")),
             "rightHandDetail": check(images.get("right_hand_front", ""), images.get("right_hand_top", "")),
-            "leftFootPivot": check(images.get("left_foot_side", ""), images.get("left_foot_top", ""), images.get("slice_l_foot_l_toe", "")),
-            "rightFootPivot": check(images.get("right_foot_side", ""), images.get("right_foot_top", ""), images.get("slice_r_foot_r_toe", "")),
+            "leftFootPivot": check(images.get("left_foot_side", ""), images.get("left_foot_top", ""), images.get("slice_l_ankle_l_toe", "")),
+            "rightFootPivot": check(images.get("right_foot_side", ""), images.get("right_foot_top", ""), images.get("slice_r_ankle_r_toe", "")),
             "deferredDetails": check(
                 images.get("full_front", ""),
                 images.get("full_side", ""),

@@ -1,6 +1,6 @@
 # 3ds Max AI Rig Assistant：MCP 接入与运行
 
-> 当前生产口径：旧算法 benchmark、qualityScore 排序、默认推荐检查和推荐提升都已屏蔽。MCP/批处理只允许 `tutorial_centerline_qbird` 作为视觉候选生成器；Skin 放行必须依赖截图、Semantic Skin Review 和人工语义确认。
+> 当前生产口径：旧算法 benchmark、qualityScore 排序、默认推荐检查和推荐提升都已屏蔽。MCP/批处理只允许 `tutorial_centerline_qbird` 作为视觉候选生成器；Skin 放行必须依赖截图、Semantic Skin Review 和人工/VLM 语义确认。
 
 这套 MCP 接入由两部分组成：
 
@@ -144,7 +144,7 @@ F:\workspace\github\3dsmax-ai-rig-assistant\server\run_mcp_server.ps1
 | `stage01_auto_pipeline` | 一键粗流程 |
 | `asset_qc_current_scene` | 对当前 Max 场景生成资产质检报告 |
 | `asset_qc_fbx_file` | 用 `3dsmaxbatch.exe` 离线检测本地 FBX |
-| `stage01_rig_fbx_file` | 用 `3dsmaxbatch.exe` 离线生成 Stage01 视觉候选和自检报告，只允许 `tutorial_centerline_qbird` |
+| `stage01_rig_fbx_file` | 用 `3dsmaxbatch.exe` 离线生成 Stage01 视觉候选、证据包、可选 VLM 签核和 Skin gate，只允许 `tutorial_centerline_qbird` |
 
 旧的多算法 benchmark、`qualityScore` 排序和 `default_recommended/` 提升流程已经禁用。相关历史文件只作为回溯材料，不再作为默认入口。
 
@@ -160,7 +160,7 @@ visual_screenshots/<asset>/*_top.png
 
 这一步是本地投影和规则自检，不是外部视觉大模型。截图可继续喂给人工或 VLM 做语义复核。脚本里的旧分数字段只作为兼容诊断数据，不参与 Skin 放行。
 
-离线流程还会生成 `visual_review/` 证据包：全局前/侧/顶图、head/pelvis/hand/foot 局部裁剪、`review_input.md` 和 `review_schema.json`。这个包用于人工或 VLM 输出结构化 blocker，不产生质量分。
+离线流程还会生成 `visual_review/` 证据包：全局前/侧/顶图、head/pelvis/hand/foot 局部裁剪、`review_input.md` 和 `review_schema.json`。这个包用于人工或 VLM 输出结构化 blocker，不产生质量分。有 `OPENAI_API_KEY` 时，batch 会自动调用 VLM 生成 `*_semantic_visual_review_vlm.json`；传 `skip_vlm_review=true` 或 PowerShell 的 `-SkipVlmReview` 可强制跳过，传 `visual_signoff_json` / `-VisualSignoffJson` 可使用外部签核。
 
 旧 benchmark 曾写入：
 

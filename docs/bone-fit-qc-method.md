@@ -114,12 +114,12 @@ Stage01 现在会在生成 Guide 前先做 mesh profile。旧的 `semantic_qbird
 - `stage01CandidateAvailable`：Biped 贴合报告、视觉截图和逐骨/语义报告都已生成，说明有候选可看。
 - `semanticPolicyReady`：Root 控制轴、HeadTop、手部细节、脚掌 pivot 等语义阻塞项在规则层面已经解决。
 - `multiviewWrapConfirmed`：人工或 VLM 已按 `visual_review/review_schema.json` 审查 front/side/top 包裹性，并且必要项全部 `pass`。
-- `semanticSkinReady`：Biped 贴合诊断、`semanticPolicyReady` 和 `multiviewWrapConfirmed` 同时为 true。只靠脚本生成或单项数值贴合，不能让它变 true。
+- `semanticSkinReady`：Biped 贴合诊断、`semanticPolicyReady` 和 `multiviewWrapConfirmed` 同时为 true。只靠脚本生成、单项数值贴合或不完整的 VLM JSON，不能让它变 true。
 - `stage01HandoffReady`：在候选可用、语义阻塞项解决、人工确认完成后，才允许交给绑定师进入 Skin 准备。
 - `skinSetupReady`：在 `stage01HandoffReady` 基础上，才允许添加 Skin 和骨骼列表。
 - `productionReady`：必须等 Skin、权重、影响数、无权重点、贴图路径和变形测试都通过后才会为 true。Stage01 自动骨架不会单独给出生产可交付结论。
 
-当前自动批处理默认不会传入人工确认标志，也不会假造 VLM 结论，所以即使旧 JSON 字段里保留了诊断分数，`semanticSkinReady`、`stage01HandoffReady`、`skinSetupReady` 和 `productionReady` 仍会保持 false。报告会列出人工/VLM 清单：front/side/top 包裹性、身体中心链、腿/脚 pivot、锁骨/肩肘腕/手团中心线、短脖子大头、以及需要延后的冠饰、喙、布料、武器、翅膀或手指细节骨。
+当前自动批处理会在证据包生成后重跑最终 Skin gate：有 `-VisualSignoffJson` 时使用外部签核；有 `OPENAI_API_KEY` 且未传 `-SkipVlmReview` 时调用 VLM 读取 front/side/top、纹理对照和局部裁剪来生成签核 JSON；没有签核时保持阻断。即使旧 JSON 字段里保留了诊断分数，只要签核缺失、schema 不完整、任何必要项不是 `pass`，`semanticSkinReady`、`stage01HandoffReady`、`skinSetupReady` 和 `productionReady` 仍会保持 false。报告会列出人工/VLM 清单：front/side/top 包裹性、身体中心链、腿/脚 pivot、锁骨/肩肘腕/手团中心线、短脖子大头、以及需要延后的冠饰、喙、布料、武器、翅膀或手指细节骨。
 
 ## 7. 本地视觉轮廓自检
 
@@ -141,6 +141,7 @@ Stage01 现在会在生成 Guide 前先做 mesh profile。旧的 `semantic_qbird
 
 - `full/`：前、侧、顶全局证据图。
 - `regions/`：head、pelvis、left/right hand、left/right foot 局部裁剪。
+- `slices/`：骨盆-脊柱、膝-踝、踝-趾这类局部骨段包裹性截图。Biped 的 3 段腿结构里实际脚段是 `Ankle -> Toe`；`L_Foot/R_Foot` 只作为视觉脚掌语义参考，不映射到第二套 Bones。
 - `review_input.md`：人工或 VLM 需要查看的证据和问题。
 - `review_schema.json`：结构化审查输出 schema。
 - `semantic_visual_review_template.json`：待填写的审查结果模板。
@@ -148,6 +149,8 @@ Stage01 现在会在生成 Guide 前先做 mesh profile。旧的 `semantic_qbird
 这一步仍不产生分数，只服务于语义 blocker 判断：Biped COM/Pelvis 是否只做控制轴、HeadTop 是否是冠饰、手部是否需要 Biped 手指/细节结构、脚掌 pivot 是否能从 side/top 视图确认。
 
 Skin 前置门会把 `visual_review/semantic_visual_review_template.json` 或同 schema 的 VLM 输出作为硬输入。必要检查包括 `frontWrap`、`sideWrap`、`topWrap`、`rootPelvisPolicy`、`crossSectionInsideVolume`、左右手和左右脚 pivot。缺失、不确定、needs_detail 或 blocker 都会阻断 Stage01 handoff。
+
+`server/vlm_multiview_review.py` 是可选自动复核器。它读取 `visual_review/*_visual_evidence_manifest.json`、`review_input.md` 和 `review_schema.json`，把多视图证据图发给视觉大模型，输出 `*_semantic_visual_review_vlm.json`。这个 JSON 不绕过规则；最终仍由 `stage01_skin_prep_gate.py` 校验完整 schema、推荐值、必填检查项和 Biped fit。
 
 ## 陆逊模型当前结论
 

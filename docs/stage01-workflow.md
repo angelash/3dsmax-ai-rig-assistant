@@ -4,7 +4,7 @@
 
 `video-tutorials/BV1ftReBYEg3-01-biped-skeleton-and-matching.md`
 
-第一版不是全自动绑骨，而是“Guide 定位点 + Biped 自动创建/匹配 + 检查报告”。这样更适合真实生产：AI 或脚本负责机械流程，人负责视觉判断。
+第一版不是全自动绑骨，而是“Guide 定位点 + Biped 自动创建/匹配 + 多视图证据包 + Skin gate”。这样更适合真实生产：AI 或脚本负责机械流程，人或 VLM 负责结构化视觉判断，最终 gate 负责拒绝不合格候选。
 
 ## 已实现能力
 
@@ -91,9 +91,9 @@ AIRA_GUIDE_L_Toe
 
 - 手指只创建 Biped 结构，暂不逐指自动匹配。
 - 不自动创建耳机、背包、枪、炮等附属 Bones；那是第二篇范围。
-- 不自动添加 Skin，也不处理权重；那是第三、四篇范围。批处理只生成 `*_stage01_skin_prep_gate.md`，说明进入 Skin 前还需要哪些人工语义确认和权重准备。
+- 不自动添加 Skin，也不处理权重；那是第三、四篇范围。批处理会生成 `*_stage01_skin_prep_gate.md`，说明进入 Skin 前还需要哪些人工/VLM 语义确认和权重准备。
 - Biped 节点贴合依赖 3ds Max 的 Biped IK 和 Figure Mode，有些节点可能需要人工微调。
-- 不直接接 MCP；稳定后再封装成 MCP 工具函数。
+- 离线 MCP/批处理入口已接入，但 Max 内部桥接仍只允许白名单工具函数，不接受任意 MaxScript。
 
 ## 适合接 MCP 的安全工具函数
 

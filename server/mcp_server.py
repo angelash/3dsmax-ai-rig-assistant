@@ -173,8 +173,11 @@ def stage01_rig_fbx_file(
     fbx_path: str,
     asset_name: str = "",
     guide_algorithm: str = "tutorial_centerline_qbird",
+    visual_signoff_json: str = "",
+    skip_vlm_review: bool = False,
+    vlm_review_model: str = "",
 ) -> dict[str, Any]:
-    """Run offline Stage01 guide, Biped creation, and fit QC for a local FBX file."""
+    """Run offline Stage01 guide, Biped creation, visual review, and Skin-prep gate for a local FBX file."""
 
     source = Path(fbx_path)
     if not source.exists():
@@ -202,6 +205,16 @@ def stage01_rig_fbx_file(
         "-GuideAlgorithm",
         guide_algorithm,
     ]
+    if visual_signoff_json:
+        signoff = Path(visual_signoff_json)
+        if not signoff.exists():
+            raise FileNotFoundError(f"Visual signoff JSON not found: {visual_signoff_json}")
+        cmd.extend(["-VisualSignoffJson", str(signoff)])
+    if skip_vlm_review:
+        cmd.append("-SkipVlmReview")
+    if vlm_review_model:
+        cmd.extend(["-VlmReviewModel", vlm_review_model])
+
     completed = subprocess.run(
         cmd,
         capture_output=True,
@@ -239,6 +252,9 @@ def stage01_rig_fbx_file(
         "visualReviewManifest": str(out_dir / "runs" / output_name / "visual_review" / f"{output_name}_visual_evidence_manifest.json"),
         "visualReviewInput": str(out_dir / "runs" / output_name / "visual_review" / "review_input.md"),
         "visualReviewSchema": str(out_dir / "runs" / output_name / "visual_review" / "review_schema.json"),
+        "visualSignoffJson": visual_signoff_json,
+        "vlmReviewJson": str(out_dir / "runs" / output_name / "visual_review" / f"{output_name}_semantic_visual_review_vlm.json"),
+        "vlmReviewStatus": "unknown",
         "wireBoneScreenshotDir": str(out_dir / "runs" / output_name / "wire_bone_screenshots"),
         "rigAssetQcJson": str(out_dir / f"{output_name}_stage01_rig_asset_qc.json"),
         "rigAssetQcMarkdown": str(out_dir / f"{output_name}_stage01_rig_asset_qc.md"),

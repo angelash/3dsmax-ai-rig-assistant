@@ -1,6 +1,6 @@
 # 自动骨骼匹配方案：当前策略
 
-> 当前结论：旧的多算法 benchmark、qualityScore 排序和“推荐算法”流程已经停用。它们在陆逊模型上给出了反向激励，会把看似高分但语义不可靠的骨架推到前面。生产链路只保留 `tutorial_centerline_qbird` 作为视觉候选生成器，再用截图、Semantic Skin Review 和人工语义确认决定是否进入 Skin。
+> 当前结论：旧的多算法 benchmark、qualityScore 排序和“推荐算法”流程已经停用。它们在陆逊模型上给出了反向激励，会把看似高分但语义不可靠的骨架推到前面。生产链路只保留 `tutorial_centerline_qbird` 作为视觉候选生成器，再用截图、Semantic Skin Review 和人工/VLM 语义确认决定是否进入 Skin。
 
 ## 当前生产链路
 
@@ -8,8 +8,9 @@
 2. 生成 front / side / top 视觉截图和 `views/<view>.md` 索引。
 3. 运行 `visual_review_pack.py`，生成全局证据图、头/手/脚/骨盆局部裁剪和结构化审查 schema。
 4. 运行 `rig_detail_review.py`，输出逐骨诊断和 Semantic Skin Review。
-5. 运行 `stage01_skin_prep_gate.py`，只根据语义阻塞项、人工确认、Skin/权重状态判断交付门。
-6. 旧 JSON 里的 `mechanicalScore`、`visualScore`、`detailScore`、`qualityScore` 等字段只保留为兼容诊断数据，不作为推荐、不显示为结论、不改变 `productionReady`。
+5. 有 `OPENAI_API_KEY` 时自动运行 `vlm_multiview_review.py` 生成结构化多视图签核；也可传入人工签核 JSON。
+6. 运行 `stage01_skin_prep_gate.py`，只根据语义阻塞项、人工/VLM 确认、Skin/权重状态判断交付门。
+7. 旧 JSON 里的 `mechanicalScore`、`visualScore`、`detailScore`、`qualityScore` 等字段只保留为兼容诊断数据，不作为推荐、不显示为结论、不改变 `productionReady`。
 
 ## 已屏蔽的本地算法
 
@@ -29,6 +30,7 @@
 | --- | --- | --- |
 | `visual_qc.py` | 生成前/侧/顶截图、轮廓和目标点。 | 只提供视觉复核输入；分数隐藏且诊断-only。 |
 | `visual_review_pack.py` | 生成全局证据图、局部裁剪和结构化审查模板。 | 给人工/VLM 做 blocker 审查；不产生分数。 |
+| `vlm_multiview_review.py` | 读取多视图证据图并输出结构化 VLM 签核 JSON。 | 只作为 signoff 输入；schema 和 pass/block 仍由 Skin gate 校验。 |
 | `rig_detail_review.py` | 按教程顺序逐骨检查，并列出语义 Skin 风险。 | Semantic Skin Review 可以阻塞 Skin；旧 detail score 不参与决策。 |
 | `stage01_skin_prep_gate.py` | 汇总候选、截图、语义风险、Skin/权重状态。 | 生产交付只看 gate 状态和阻塞项。 |
 | `skeletor_probe.py` | 外部几何骨架探测。 | 研究性参考；当前模型分件太多，不作为生成入口。 |
@@ -91,7 +93,7 @@ F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model_tutorial_center
 
 - 不再让旧评分选择方案。
 - 继续改进截图组织、语义风险识别和人工签核清单。
-- 后续可以接 VLM 看 front/side/top 截图，但它也只能给语义审核意见，不能直接把 `productionReady` 置 true。
+- VLM 已接入为可选多视图签核器，但它只能给语义审核 JSON，不能直接把 `productionReady` 置 true。
 - 若引入 UniRig、RigNet 或其他外部候选，也必须走同一套视觉语义 gate。
 
 ## 参考资料

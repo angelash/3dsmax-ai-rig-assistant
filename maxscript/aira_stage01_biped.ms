@@ -1062,11 +1062,9 @@ struct AIRAStage01Tool
             #(#lleg, 1, "L_Hip"),
             #(#lleg, 2, "L_Knee"),
             #(#lleg, 3, "L_Ankle"),
-            #(#lleg, 4, "L_Foot"),
             #(#rleg, 1, "R_Hip"),
             #(#rleg, 2, "R_Knee"),
             #(#rleg, 3, "R_Ankle"),
-            #(#rleg, 4, "R_Foot"),
 
             #(#ltoes, 1, "L_Toe"),
             #(#rtoes, 1, "R_Toe")
@@ -1093,13 +1091,11 @@ struct AIRAStage01Tool
             #("Pelvis", "L_Hip"),
             #("L_Hip", "L_Knee"),
             #("L_Knee", "L_Ankle"),
-            #("L_Ankle", "L_Foot"),
-            #("L_Foot", "L_Toe"),
+            #("L_Ankle", "L_Toe"),
             #("Pelvis", "R_Hip"),
             #("R_Hip", "R_Knee"),
             #("R_Knee", "R_Ankle"),
-            #("R_Ankle", "R_Foot"),
-            #("R_Foot", "R_Toe")
+            #("R_Ankle", "R_Toe")
         )
     ),
 
@@ -1160,11 +1156,11 @@ struct AIRAStage01Tool
 
     fn templateBoneRole startName endName =
     (
-        if matchPattern startName pattern:"*Clavicle" ignoreCase:true or matchPattern endName pattern:"*Clavicle" ignoreCase:true then "clavicle"
+        if (matchPattern endName pattern:"*Toe" ignoreCase:true) or (matchPattern startName pattern:"*Foot" ignoreCase:true) then "foot"
+        else if matchPattern startName pattern:"*Clavicle" ignoreCase:true or matchPattern endName pattern:"*Clavicle" ignoreCase:true then "clavicle"
         else if matchPattern startName pattern:"*Shoulder" ignoreCase:true or matchPattern startName pattern:"*Elbow" ignoreCase:true or matchPattern startName pattern:"*Wrist" ignoreCase:true then "arm"
         else if matchPattern startName pattern:"*Hip" ignoreCase:true or matchPattern startName pattern:"*Knee" ignoreCase:true or matchPattern startName pattern:"*Ankle" ignoreCase:true then "leg"
         else if matchPattern endName pattern:"*Hip" ignoreCase:true or matchPattern endName pattern:"*Knee" ignoreCase:true or matchPattern endName pattern:"*Ankle" ignoreCase:true then "leg"
-        else if matchPattern startName pattern:"*Foot" ignoreCase:true or matchPattern endName pattern:"*Toe" ignoreCase:true then "foot"
         else if startName == "Root" or startName == "Pelvis" or startName == "Spine" or startName == "Chest" or startName == "Neck" or startName == "Head" then
         (
             if startName == "Head" or endName == "HeadTop" then "head" else "torso"

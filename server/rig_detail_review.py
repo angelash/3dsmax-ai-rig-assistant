@@ -25,13 +25,11 @@ SEGMENT_SPECS: list[dict[str, Any]] = [
     {"phase": "03 legs and feet", "start": "Pelvis", "end": "L_Hip", "role": "left_hip_socket", "min": 0.06, "max": 0.16, "rules": ["left", "outward", "down"]},
     {"phase": "03 legs and feet", "start": "L_Hip", "end": "L_Knee", "role": "left_thigh", "min": 0.10, "max": 0.24, "rules": ["left", "down"]},
     {"phase": "03 legs and feet", "start": "L_Knee", "end": "L_Ankle", "role": "left_calf", "min": 0.08, "max": 0.20, "rules": ["left", "down"]},
-    {"phase": "03 legs and feet", "start": "L_Ankle", "end": "L_Foot", "role": "left_midfoot_depth_axis", "min": 0.04, "max": 0.14, "rules": ["left", "toe_forward", "level"]},
-    {"phase": "03 legs and feet", "start": "L_Foot", "end": "L_Toe", "role": "left_front_foot", "min": 0.06, "max": 0.20, "rules": ["left", "toe_forward", "level"]},
+    {"phase": "03 legs and feet", "start": "L_Ankle", "end": "L_Toe", "role": "left_front_foot", "min": 0.06, "max": 0.22, "rules": ["left", "toe_forward", "level"]},
     {"phase": "03 legs and feet", "start": "Pelvis", "end": "R_Hip", "role": "right_hip_socket", "min": 0.06, "max": 0.16, "rules": ["right", "outward", "down"]},
     {"phase": "03 legs and feet", "start": "R_Hip", "end": "R_Knee", "role": "right_thigh", "min": 0.10, "max": 0.24, "rules": ["right", "down"]},
     {"phase": "03 legs and feet", "start": "R_Knee", "end": "R_Ankle", "role": "right_calf", "min": 0.08, "max": 0.20, "rules": ["right", "down"]},
-    {"phase": "03 legs and feet", "start": "R_Ankle", "end": "R_Foot", "role": "right_midfoot_depth_axis", "min": 0.04, "max": 0.14, "rules": ["right", "toe_forward", "level"]},
-    {"phase": "03 legs and feet", "start": "R_Foot", "end": "R_Toe", "role": "right_front_foot", "min": 0.06, "max": 0.20, "rules": ["right", "toe_forward", "level"]},
+    {"phase": "03 legs and feet", "start": "R_Ankle", "end": "R_Toe", "role": "right_front_foot", "min": 0.06, "max": 0.22, "rules": ["right", "toe_forward", "level"]},
 ]
 
 

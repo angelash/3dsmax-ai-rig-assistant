@@ -40,34 +40,76 @@ def add_blocker(blockers: list[dict[str, str]], code: str, message: str, owner: 
     blockers.append({"code": code, "owner": owner, "message": message})
 
 
+REQUIRED_SIGNOFF_TOP_LEVEL = [
+    "assetName",
+    "decisionPolicy",
+    "reviewer",
+    "reviewedAt",
+    "checks",
+    "stage01HandoffRecommendation",
+    "notes",
+]
+
+REQUIRED_SIGNOFF_CHECKS = [
+    "rootPelvisPolicy",
+    "frontWrap",
+    "sideWrap",
+    "topWrap",
+    "textureLandmarkTrace",
+    "crossSectionInsideVolume",
+    "headTopSemantic",
+    "leftHandDetail",
+    "rightHandDetail",
+    "leftFootPivot",
+    "rightFootPivot",
+    "deferredDetails",
+]
+
+ALLOWED_SIGNOFF_STATUSES = {"pass", "blocker", "needs_detail", "uncertain", "not_visible"}
+ALLOWED_SIGNOFF_RECOMMENDATIONS = {"approve_for_manual_skin_setup", "block_until_fixed", "needs_more_views"}
+
+
 def evaluate_multiview_signoff(visual_signoff: dict[str, Any]) -> dict[str, Any]:
-    required_checks = [
-        "rootPelvisPolicy",
-        "frontWrap",
-        "sideWrap",
-        "topWrap",
-        "crossSectionInsideVolume",
-        "leftFootPivot",
-        "rightFootPivot",
-        "leftHandDetail",
-        "rightHandDetail",
-    ]
+    required_checks = REQUIRED_SIGNOFF_CHECKS
     if not visual_signoff:
         return {
             "available": False,
             "ready": False,
+            "schemaValid": False,
+            "schemaIssues": ["visual signoff JSON is missing"],
             "requiredChecks": required_checks,
             "missingChecks": required_checks,
             "failedChecks": [],
             "recommendation": "",
         }
 
+    schema_issues: list[str] = []
+    for name in REQUIRED_SIGNOFF_TOP_LEVEL:
+        if name not in visual_signoff:
+            schema_issues.append(f"missing top-level field: {name}")
+    if visual_signoff.get("decisionPolicy") != "visual_semantic_gate_only":
+        schema_issues.append("decisionPolicy must be visual_semantic_gate_only")
+
     checks = visual_signoff.get("checks", {})
+    if not isinstance(checks, dict):
+        schema_issues.append("checks must be an object")
+        checks = {}
     missing = [name for name in required_checks if name not in checks]
+    for name in missing:
+        schema_issues.append(f"missing required check: {name}")
+
     failed: list[dict[str, str]] = []
     for name in required_checks:
         check = checks.get(name)
         status_value = check.get("status") if isinstance(check, dict) else None
+        if not isinstance(check, dict):
+            schema_issues.append(f"check {name} must be an object")
+        elif status_value not in ALLOWED_SIGNOFF_STATUSES:
+            schema_issues.append(f"check {name} has invalid status: {status_value}")
+        elif not isinstance(check.get("evidence"), list):
+            schema_issues.append(f"check {name} evidence must be an array")
+        elif not isinstance(check.get("comment"), str):
+            schema_issues.append(f"check {name} comment must be a string")
         if status_value != "pass":
             failed.append(
                 {
@@ -78,10 +120,18 @@ def evaluate_multiview_signoff(visual_signoff: dict[str, Any]) -> dict[str, Any]
             )
 
     recommendation = str(visual_signoff.get("stage01HandoffRecommendation", ""))
-    ready = recommendation == "approve_for_manual_skin_setup" and not missing and not failed
+    if recommendation not in ALLOWED_SIGNOFF_RECOMMENDATIONS:
+        schema_issues.append(f"invalid stage01HandoffRecommendation: {recommendation}")
+    if not isinstance(visual_signoff.get("notes"), list):
+        schema_issues.append("notes must be an array")
+
+    schema_valid = not schema_issues
+    ready = schema_valid and recommendation == "approve_for_manual_skin_setup" and not missing and not failed
     return {
         "available": True,
         "ready": ready,
+        "schemaValid": schema_valid,
+        "schemaIssues": schema_issues,
         "requiredChecks": required_checks,
         "missingChecks": missing,
         "failedChecks": failed,
@@ -130,6 +180,7 @@ def analyze(
     ]
     semantic_policy_ready = not semantic_skin_blockers
     semantic_skin_ready = semantic_policy_ready and multiview_signoff["ready"] and biped_fit_ready
+    semantic_confirmed = manual_semantic_confirmed or multiview_signoff["ready"]
     has_skin = skeleton.get("hasSkin") is True
     skin_influence_ready = (
         has_skin
@@ -145,9 +196,9 @@ def analyze(
         and stage01_mechanical_handoff_ready
         and semantic_skin_ready
         and multiview_signoff["ready"]
-        and manual_semantic_confirmed
+        and semantic_confirmed
     )
-    skin_setup_ready = stage01_handoff_ready and manual_semantic_confirmed
+    skin_setup_ready = stage01_handoff_ready and semantic_confirmed
     production_ready = skin_setup_ready and skin_weights_complete and skin_influence_ready
 
     blockers: list[dict[str, str]] = []
@@ -169,10 +220,11 @@ def analyze(
     if not multiview_signoff["ready"]:
         if multiview_signoff["available"]:
             failed_names = ", ".join(item["check"] for item in multiview_signoff["failedChecks"]) or "none"
+            schema_issue_text = "; ".join(multiview_signoff.get("schemaIssues", [])) or "none"
             add_blocker(
                 blockers,
                 "multiview_wrap_signoff_failed",
-                f"Human/VLM multiview review did not approve front/side/top wrapping. Failed or non-pass checks: {failed_names}.",
+                f"Human/VLM multiview review did not approve front/side/top wrapping. Failed or non-pass checks: {failed_names}. Schema issues: {schema_issue_text}.",
                 "human_or_vlm",
             )
         else:
@@ -182,12 +234,12 @@ def analyze(
                 "Front, side and top wire-bone screenshots must be reviewed for wrapping before the Stage01 candidate can enter Skin setup.",
                 "human_or_vlm",
             )
-    if not manual_semantic_confirmed:
+    if not semantic_confirmed:
         add_blocker(
             blockers,
-            "manual_semantic_confirmation_required",
-            "A human rigger still needs to confirm the estimated guide landmarks against the mesh before Skin.",
-            "human",
+            "semantic_confirmation_required",
+            "A human rigger or VLM still needs to confirm the estimated guide landmarks against the mesh before Skin.",
+            "human_or_vlm",
         )
     if not has_skin:
         add_blocker(blockers, "skin_modifier_missing", "No Skin modifier exists yet; this is expected for Stage01 but blocks production delivery.")
@@ -199,6 +251,13 @@ def analyze(
         add_blocker(blockers, "absolute_texture_paths", "Texture paths are absolute and should be localized before delivery.", "asset")
 
     prep_warnings: list[dict[str, str]] = []
+    if multiview_signoff["ready"] and not manual_semantic_confirmed:
+        prep_warnings.append(
+            {
+                "code": "human_review_recommended_after_vlm",
+                "message": "VLM signoff can clear Stage01 handoff, but a human rigger should still spot-check the scene before final production delivery.",
+            }
+        )
     if transform.get("centeredXY") is False:
         prep_warnings.append(
             {
@@ -235,32 +294,32 @@ def analyze(
         },
         {
             "id": "confirm_body_center_chain",
-            "status": "done" if manual_semantic_confirmed else "required",
+            "status": "done" if semantic_confirmed else "required",
             "check": "Confirm Biped COM/Pelvis sit at the visual waist/center of mass; Biped Spine, Chest, Neck and Head follow the body/head volume.",
         },
         {
             "id": "confirm_root_deformer_policy",
-            "status": "done" if manual_semantic_confirmed else "required",
+            "status": "done" if semantic_confirmed else "required",
             "check": "Confirm Biped COM is control-only and body deformation starts from Biped Pelvis in Skin.",
         },
         {
             "id": "confirm_headtop_vs_crest",
-            "status": "done" if manual_semantic_confirmed else "required",
+            "status": "done" if semantic_confirmed else "required",
             "check": "Confirm the Biped Head is aligned to skull/helmet volume; HeadTop/CrestTop guides are visual references only unless the Biped structure is explicitly extended.",
         },
         {
             "id": "confirm_leg_and_foot_pivots",
-            "status": "done" if manual_semantic_confirmed else "required",
+            "status": "done" if semantic_confirmed else "required",
             "check": "Confirm hip, knee, ankle, rear-foot and toe/front-foot pivots match the model and bend direction in side/top views.",
         },
         {
             "id": "confirm_arm_centerlines",
-            "status": "done" if manual_semantic_confirmed else "required",
+            "status": "done" if semantic_confirmed else "required",
             "check": "Confirm clavicle, shoulder, elbow, wrist and hand-mass guides use the local limb centerline, not the silhouette edge.",
         },
         {
             "id": "confirm_deferred_details",
-            "status": "done" if manual_semantic_confirmed else "required",
+            "status": "done" if semantic_confirmed else "required",
             "check": "Confirm whether beak, cloth, weapon, wing, claw or finger details require Biped structure/options before Skin; do not add ordinary Bones to the body flow.",
         },
     ]
@@ -278,8 +337,8 @@ def analyze(
         },
         {
             "id": "manual_landmark_signoff",
-            "status": status(manual_semantic_confirmed),
-            "note": "Required because current guides are generated from mesh-profile and centerline estimates.",
+            "status": status(semantic_confirmed),
+            "note": "Required because current guides are generated from mesh-profile and centerline estimates. Can be satisfied by a passing human/VLM visual signoff.",
         },
         {
             "id": "multiview_wrap_signoff",
@@ -329,6 +388,7 @@ def analyze(
         "skinSetupReady": skin_setup_ready,
         "productionReady": production_ready,
         "manualSemanticConfirmed": manual_semantic_confirmed,
+        "semanticConfirmed": semantic_confirmed,
         "skinWeightsComplete": skin_weights_complete,
         "readiness": {
             "bipedFit": {
@@ -377,8 +437,8 @@ def analyze(
             if stage01_candidate_available and not multiview_signoff["ready"]
             else "Visual candidate exists, but semantic Skin blockers must be resolved before Skin setup."
             if stage01_candidate_available and not semantic_policy_ready
-            else "Visual candidate exists and has no semantic blockers; human visual signoff is still required before Skin setup."
-            if stage01_candidate_available and semantic_skin_ready and not manual_semantic_confirmed
+            else "Visual candidate exists and has no semantic blockers; human or VLM visual signoff is still required before Skin setup."
+            if stage01_candidate_available and semantic_policy_ready and not semantic_confirmed
             else "Required visual candidate outputs are missing."
             if not stage01_candidate_available
             else "Visual semantic signoff is complete; proceed with Skin setup."
@@ -399,6 +459,7 @@ def write_markdown(qc: dict[str, Any], inputs: dict[str, str], md_path: Path) ->
         f"- Multiview wrap confirmed: `{qc['multiviewWrapConfirmed']}`",
         f"- Semantic policy ready: `{qc['semanticPolicyReady']}`",
         f"- Semantic Skin ready: `{qc['semanticSkinReady']}`",
+        f"- Semantic confirmed: `{qc['semanticConfirmed']}`",
         f"- Stage01 handoff ready: `{qc['stage01HandoffReady']}`",
         f"- Skin setup ready: `{qc['skinSetupReady']}`",
         f"- Production ready: `{qc['productionReady']}`",
@@ -435,6 +496,7 @@ def write_markdown(qc: dict[str, Any], inputs: dict[str, str], md_path: Path) ->
     multiview = readiness["multiviewWrapSignoff"]
     multiview_state = (
         f"recommendation={multiview.get('recommendation') or 'missing'}, "
+        f"schemaValid={multiview.get('schemaValid')}, "
         f"failedChecks={len(multiview.get('failedChecks', []))}, "
         f"missingChecks={len(multiview.get('missingChecks', []))}"
     )
@@ -503,6 +565,7 @@ def main() -> int:
     parser.add_argument("--rig-asset-qc-json", default="")
     parser.add_argument("--visual-signoff-json", default="")
     parser.add_argument("--out-dir", default="")
+    parser.add_argument("--md-out-dir", default="")
     parser.add_argument("--manual-semantic-confirmed", action="store_true")
     parser.add_argument("--skin-weights-complete", action="store_true")
     args = parser.parse_args()
@@ -525,6 +588,8 @@ def main() -> int:
     )
     out_dir = Path(args.out_dir) if args.out_dir else Path(biped_fit_qc_path).parent
     out_dir.mkdir(parents=True, exist_ok=True)
+    md_dir = Path(args.md_out_dir) if args.md_out_dir else out_dir
+    md_dir.mkdir(parents=True, exist_ok=True)
 
     qc = analyze(
         asset_name=asset_name,
@@ -548,7 +613,7 @@ def main() -> int:
     qc["inputs"] = inputs
 
     json_path = out_dir / f"{asset_name}_stage01_skin_prep_gate.json"
-    md_path = out_dir / f"{asset_name}_stage01_skin_prep_gate.md"
+    md_path = md_dir / f"{asset_name}_stage01_skin_prep_gate.md"
     json_path.write_text(json.dumps(qc, ensure_ascii=False, indent=2), encoding="utf-8")
     write_markdown(qc, inputs, md_path)
 

@@ -237,11 +237,12 @@
   "asset_name": "luxun_model",
   "stage01_skin_prep_gate_json": "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\out\\runs\\luxun_model__YYYYMMDD_HHMMSS\\data\\luxun_model_stage01_skin_prep_gate.json",
   "allow_blocked_stage01": false,
-  "bone_affect_limit": 3
+  "bone_affect_limit": 3,
+  "reference_fbx": ""
 }
 ```
 
-`Stage02SkinMaxFile` 是独立 Skin 执行入口，只读取现有 Stage01 `.max` 场景，不创建 Guide，不重新拟合 Biped，也不修改 Stage01 绑骨逻辑。默认要求 `stage01_skin_prep_gate_json.skinSetupReady=true`；`allow_blocked_stage01=true` 只允许研究性第一版权重，输出会保持 `productionReady=false`。
+`Stage02SkinMaxFile` 是独立 Skin 执行入口，只读取现有 Stage01 `.max` 场景，不创建 Guide，不重新拟合 Biped，也不修改 Stage01 绑骨逻辑。默认要求 `stage01_skin_prep_gate_json.skinSetupReady=true`；`allow_blocked_stage01=true` 只允许研究性第一版权重，输出会保持 `productionReady=false`。如果传入同拓扑已蒙皮参考 FBX，`reference_fbx` 会启用参考权重压缩：读取参考 Skin 的逐顶点权重，并按语义折叠到当前简化 Biped 变形骨上。
 
 输出：
 
@@ -253,6 +254,8 @@
   "runDir": "F:/workspace/github/3dsmax-ai-rig-assistant/out/stage02_runs/luxun_model__YYYYMMDD_HHMMSS",
   "stage01GateStatus": "skin_setup_ready",
   "boneAffectLimit": 3,
+  "referenceFbx": "",
+  "weightMode": "heuristic_biped_segment_proximity",
   "scene": "F:/workspace/github/3dsmax-ai-rig-assistant/out/stage02_runs/luxun_model__YYYYMMDD_HHMMSS/scene/luxun_model_stage02_skin_scene.max",
   "stage02SkinReportJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/stage02_runs/luxun_model__YYYYMMDD_HHMMSS/data/luxun_model_stage02_skin_report.json",
   "stage02SkinReportMarkdown": "F:/workspace/github/3dsmax-ai-rig-assistant/out/stage02_runs/luxun_model__YYYYMMDD_HHMMSS/reports/luxun_model_stage02_skin_report.md",
@@ -266,6 +269,7 @@
 - 只添加 Biped 变形节点，COM/vertical root 保持 control-only。
 - 设置 Bone Affect Limit，默认教程值为 `3`。
 - 根据 Biped 段、左右侧、身高区域生成第一轮初始顶点权重。
+- 可选把参考答案 Skin 权重压缩到当前 Biped 语义骨，保留游戏侧简化骨骼数量。
 - 调用可用的 Remove Zero Weights。
 - 输出 `skinWeightsComplete=false`、`deformationTestComplete=false`、`productionReady=false`，直到人工权重细刷和动作测试完成。
 

@@ -578,6 +578,265 @@ struct AIRAStage02SkinTool
         ok
     ),
 
+    fn referenceSemanticForBoneName boneName =
+    (
+        local n = boneName as string
+        if n == "" then undefined
+        else if matchPattern n pattern:"*RL_BoneRoot*" ignoreCase:true then "Pelvis"
+        else if matchPattern n pattern:"*CC_Base_Hip*" ignoreCase:true then "Pelvis"
+        else if matchPattern n pattern:"*CC_Base_Pelvis*" ignoreCase:true then "Pelvis"
+        else if matchPattern n pattern:"*CC_Base_Waist*" ignoreCase:true then "Spine"
+        else if matchPattern n pattern:"*CC_Base_Spine*" ignoreCase:true then "Chest"
+        else if matchPattern n pattern:"*CC_Base_Ribs*" ignoreCase:true then "Chest"
+        else if matchPattern n pattern:"*CC_Base_*_Breast*" ignoreCase:true then "Chest"
+        else if matchPattern n pattern:"*CC_Base_Neck*" ignoreCase:true then "Neck"
+        else if matchPattern n pattern:"*CC_Base_Head*" ignoreCase:true then "Head"
+        else if matchPattern n pattern:"*CC_Base_*Eye*" ignoreCase:true then "Head"
+        else if matchPattern n pattern:"*CC_Base_*Jaw*" ignoreCase:true then "Head"
+        else if matchPattern n pattern:"*CC_Base_*Tongue*" ignoreCase:true then "Head"
+        else if matchPattern n pattern:"*CC_Base_*Teeth*" ignoreCase:true then "Head"
+        else if matchPattern n pattern:"*CC_Base_Facial*" ignoreCase:true then "Head"
+        else if matchPattern n pattern:"*CC_Base_L_Clavicle*" ignoreCase:true then "L_Clavicle"
+        else if matchPattern n pattern:"*CC_Base_L_Upperarm*" ignoreCase:true then "L_UpperArm"
+        else if matchPattern n pattern:"*CC_Base_L_Forearm*" ignoreCase:true then "L_Forearm"
+        else if matchPattern n pattern:"*CC_Base_L_ElbowShareBone*" ignoreCase:true then "L_Forearm"
+        else if matchPattern n pattern:"*CC_Base_L_Hand*" ignoreCase:true then "L_Hand"
+        else if matchPattern n pattern:"*CC_Base_R_Clavicle*" ignoreCase:true then "R_Clavicle"
+        else if matchPattern n pattern:"*CC_Base_R_Upperarm*" ignoreCase:true then "R_UpperArm"
+        else if matchPattern n pattern:"*CC_Base_R_Forearm*" ignoreCase:true then "R_Forearm"
+        else if matchPattern n pattern:"*CC_Base_R_ElbowShareBone*" ignoreCase:true then "R_Forearm"
+        else if matchPattern n pattern:"*CC_Base_R_Hand*" ignoreCase:true then "R_Hand"
+        else if matchPattern n pattern:"*CC_Base_L_Thigh*" ignoreCase:true then "L_Thigh"
+        else if matchPattern n pattern:"*CC_Base_L_KneeShareBone*" ignoreCase:true then "L_Calf"
+        else if matchPattern n pattern:"*CC_Base_L_Calf*" ignoreCase:true then "L_Calf"
+        else if matchPattern n pattern:"*CC_Base_L_Foot*" ignoreCase:true then "L_Foot"
+        else if matchPattern n pattern:"*CC_Base_L_Toe*" ignoreCase:true then "L_Toe"
+        else if matchPattern n pattern:"*CC_Base_L_*Toe*" ignoreCase:true then "L_Toe"
+        else if matchPattern n pattern:"*CC_Base_R_Thigh*" ignoreCase:true then "R_Thigh"
+        else if matchPattern n pattern:"*CC_Base_R_KneeShareBone*" ignoreCase:true then "R_Calf"
+        else if matchPattern n pattern:"*CC_Base_R_Calf*" ignoreCase:true then "R_Calf"
+        else if matchPattern n pattern:"*CC_Base_R_Foot*" ignoreCase:true then "R_Foot"
+        else if matchPattern n pattern:"*CC_Base_R_Toe*" ignoreCase:true then "R_Toe"
+        else if matchPattern n pattern:"*CC_Base_R_*Toe*" ignoreCase:true then "R_Toe"
+        else undefined
+    ),
+
+    fn addSemanticWeight pairs semanticName weight =
+    (
+        if semanticName != undefined and weight > epsilon do
+        (
+            local found = 0
+            for i = 1 to pairs.count do
+            (
+                if pairs[i][1] == semanticName do found = i
+            )
+            if found > 0 then
+            (
+                local item = pairs[found]
+                pairs[found] = #(item[1], item[2] + weight)
+            )
+            else append pairs #(semanticName, weight)
+        )
+        pairs
+    ),
+
+    fn trimNormalizeSemanticPairs pairs limit =
+    (
+        local filtered = #()
+        for item in pairs do
+        (
+            if item[2] > epsilon do append filtered #(item[1], item[2])
+        )
+        for i = 1 to filtered.count do
+        (
+            for j = (i + 1) to filtered.count do
+            (
+                if j <= filtered.count and filtered[j][2] > filtered[i][2] do
+                (
+                    local tmp = filtered[i]
+                    filtered[i] = filtered[j]
+                    filtered[j] = tmp
+                )
+            )
+        )
+        while filtered.count > limit do deleteItem filtered filtered.count
+
+        local total = 0.0
+        for item in filtered do total += item[2]
+        if total > epsilon do
+        (
+            for i = 1 to filtered.count do
+            (
+                filtered[i] = #(filtered[i][1], filtered[i][2] / total)
+            )
+        )
+        filtered
+    ),
+
+    fn normalizeBoneWeightAssignment bones weights fallbackBoneIndex =
+    (
+        local outBones = #()
+        local outWeights = #()
+        local total = 0.0
+        for i = 1 to bones.count do
+        (
+            if i <= weights.count and weights[i] > epsilon do
+            (
+                local existing = findItem outBones bones[i]
+                if existing > 0 then outWeights[existing] = outWeights[existing] + weights[i]
+                else
+                (
+                    append outBones bones[i]
+                    append outWeights weights[i]
+                )
+            )
+        )
+        for w in outWeights do total += w
+        if total <= epsilon then
+        (
+            if fallbackBoneIndex > 0 then #( #(fallbackBoneIndex), #(1.0), true )
+            else #( #(), #(), true )
+        )
+        else
+        (
+            for i = 1 to outWeights.count do outWeights[i] = outWeights[i] / total
+            #(outBones, outWeights, false)
+        )
+    ),
+
+    fn semanticSkinBoneIndexPairs skinMod semanticNodes =
+    (
+        local out = #()
+        for item in semanticNodes do
+        (
+            local idx = skinBoneIndexForNode skinMod item[2]
+            if idx > 0 do append out #(item[1], idx)
+        )
+        out
+    ),
+
+    fn skinBoneIndexForSemantic semanticIndexPairs semanticName =
+    (
+        for item in semanticIndexPairs do
+        (
+            if item[1] == semanticName do return item[2]
+        )
+        0
+    ),
+
+    fn assignmentFromReferencePairs semanticPairs semanticIndexPairs fallbackBoneIndex =
+    (
+        local bones = #()
+        local weights = #()
+        if semanticPairs != undefined do
+        (
+            for item in semanticPairs do
+            (
+                local idx = skinBoneIndexForSemantic semanticIndexPairs item[1]
+                if idx > 0 do
+                (
+                    append bones idx
+                    append weights item[2]
+                )
+            )
+        )
+        normalizeBoneWeightAssignment bones weights fallbackBoneIndex
+    ),
+
+    fn referenceMetaValue referenceMeta index defaultValue =
+    (
+        if referenceMeta == undefined then defaultValue
+        else if referenceMeta.count < index then defaultValue
+        else referenceMeta[index]
+    ),
+
+    fn findReferenceSkinObject =
+    (
+        local bestObj = undefined
+        local bestSkin = undefined
+        local bestVerts = 0
+        for n in geometry do
+        (
+            local skinMod = findSkinModifier n
+            if skinMod != undefined do
+            (
+                local verts = 0
+                try(verts = skinOps.GetNumberVertices skinMod)catch(verts = 0)
+                if verts == 0 do
+                (
+                    local tri = undefined
+                    try(tri = snapshotAsMesh n)catch(tri = undefined)
+                    if tri != undefined do
+                    (
+                        verts = tri.numverts
+                        try(delete tri)catch()
+                    )
+                )
+                if verts > bestVerts do
+                (
+                    bestVerts = verts
+                    bestObj = n
+                    bestSkin = skinMod
+                )
+            )
+        )
+        #(bestObj, bestSkin, bestVerts)
+    ),
+
+    fn extractReferenceCollapsedWeights referenceFbx =
+    (
+        local issues = #()
+        local weightsByVertex = #()
+        local found = findReferenceSkinObject()
+        local refObj = found[1]
+        local skinMod = found[2]
+        local vertexCount = found[3]
+        local totalInfluences = 0
+        local mappedInfluences = 0
+        local unmappedInfluences = 0
+        local verticesWithMappedWeights = 0
+
+        if refObj == undefined or skinMod == undefined then
+        (
+            append issues "No reference Skin object found after importing reference FBX."
+        )
+        else
+        (
+            for v = 1 to vertexCount do
+            (
+                local semanticPairs = #()
+                local wc = 0
+                try(wc = skinOps.GetVertexWeightCount skinMod v)catch(wc = 0)
+                for i = 1 to wc do
+                (
+                    local boneId = 0
+                    local weight = 0.0
+                    local boneName = ""
+                    try(boneId = skinOps.GetVertexWeightBoneID skinMod v i)catch(boneId = 0)
+                    try(weight = skinOps.GetVertexWeight skinMod v i)catch(weight = 0.0)
+                    if boneId > 0 do try(boneName = skinOps.GetBoneName skinMod boneId 0)catch(boneName = "")
+                    totalInfluences += 1
+                    local semanticName = referenceSemanticForBoneName boneName
+                    if semanticName != undefined then
+                    (
+                        mappedInfluences += 1
+                        addSemanticWeight semanticPairs semanticName weight
+                    )
+                    else
+                    (
+                        unmappedInfluences += 1
+                    )
+                )
+                semanticPairs = trimNormalizeSemanticPairs semanticPairs maxAssignedInfluences
+                if semanticPairs.count > 0 do verticesWithMappedWeights += 1
+                append weightsByVertex semanticPairs
+            )
+        )
+
+        local meta = #(referenceFbx, (if refObj != undefined then refObj.name else ""), vertexCount, totalInfluences, mappedInfluences, unmappedInfluences, verticesWithMappedWeights, issues.count)
+        #(weightsByVertex, meta, issues)
+    ),
+
     fn applyInitialWeightsToObject obj skinMod refs fallbackBoneIndex bounds =
     (
         local processed = 0
@@ -621,7 +880,56 @@ struct AIRAStage02SkinTool
         #(processed, fallbackVertices, failed, maxInfluences, verticesSeen)
     ),
 
-    fn writeStage02Reports assetName objectResults issues bipedRoot semanticNodeCount stage01GateStatus stage01GateJson =
+    fn applyReferenceCollapsedWeightsToObject obj skinMod semanticIndexPairs referenceWeights refs fallbackBoneIndex bounds =
+    (
+        local processed = 0
+        local fallbackVertices = 0
+        local failed = 0
+        local maxInfluences = 0
+        local verticesSeen = 0
+        local tri = undefined
+
+        try(tri = snapshotAsMesh obj)catch(tri = undefined)
+        if tri != undefined do
+        (
+            local skinVerts = 0
+            try(skinVerts = skinOps.GetNumberVertices skinMod)catch(skinVerts = tri.numverts)
+            local count = if tri.numverts < skinVerts then tri.numverts else skinVerts
+            for v = 1 to count do
+            (
+                verticesSeen += 1
+                local assignment = #( #(), #(), true )
+                if v <= referenceWeights.count do
+                (
+                    assignment = assignmentFromReferencePairs referenceWeights[v] semanticIndexPairs fallbackBoneIndex
+                )
+                if assignment[3] do
+                (
+                    local p = (getVert tri v) * obj.objectTransform
+                    assignment = chooseWeights p refs fallbackBoneIndex bounds
+                    fallbackVertices += 1
+                )
+
+                local bones = assignment[1]
+                local weights = assignment[2]
+                if bones.count > 0 and weights.count > 0 then
+                (
+                    if replaceVertexWeightsSafe skinMod v bones weights then
+                    (
+                        processed += 1
+                        if bones.count > maxInfluences do maxInfluences = bones.count
+                    )
+                    else failed += 1
+                )
+                else failed += 1
+            )
+            try(delete tri)catch()
+        )
+        try(skinOps.RemoveZeroWeights skinMod)catch()
+        #(processed, fallbackVertices, failed, maxInfluences, verticesSeen)
+    ),
+
+    fn writeStage02Reports assetName objectResults issues bipedRoot semanticNodeCount stage01GateStatus stage01GateJson weightSource referenceMeta =
     (
         local dataDir = joinPath outDir "data"
         local reportsDir = joinPath outDir "reports"
@@ -647,6 +955,8 @@ struct AIRAStage02SkinTool
         )
 
         local skinSetupReady = objectResults.count > 0 and totalProcessed > 0 and totalFailed == 0 and issues.count == 0
+        local hasReferenceTransfer = referenceMeta != undefined and weightSource == "reference_collapsed_skin_weights"
+        local weightNote = if hasReferenceTransfer then "Weights are collapsed from the imported reference Skin onto the simplified Biped semantic bones." else "Weights are generated from Biped segment proximity and side/height gates."
 
         local fp = createFile jsonPath
         format "{\n" to:fp
@@ -656,6 +966,16 @@ struct AIRAStage02SkinTool
         format "  \"stage\": %, \n" (jsonString "stage02_initial_skin_setup") to:fp
         format "  \"tutorialSources\": [%, %],\n" (jsonString "BV1ftReBYEg3-03-skin-setup-and-prop-weights") (jsonString "BV1ftReBYEg3-04-body-weights-and-final-check") to:fp
         format "  \"decisionPolicy\": %, \n" (jsonString "first_pass_skin_only_not_production_delivery") to:fp
+        format "  \"weightSource\": %, \n" (jsonString weightSource) to:fp
+        if hasReferenceTransfer then
+        (
+            format "  \"referenceTransfer\": {\"referenceFbx\": %, \"referenceSkinObject\": %, \"referenceVertices\": %, \"referenceInfluences\": %, \"mappedInfluences\": %, \"unmappedInfluences\": %, \"verticesWithMappedWeights\": %, \"extractionIssueCount\": %},\n" \
+                (jsonString (referenceMetaValue referenceMeta 1 "")) (jsonString (referenceMetaValue referenceMeta 2 "")) (referenceMetaValue referenceMeta 3 0) (referenceMetaValue referenceMeta 4 0) (referenceMetaValue referenceMeta 5 0) (referenceMetaValue referenceMeta 6 0) (referenceMetaValue referenceMeta 7 0) (referenceMetaValue referenceMeta 8 0) to:fp
+        )
+        else
+        (
+            format "  \"referenceTransfer\": null,\n" to:fp
+        )
         format "  \"stage01GateStatus\": %, \n" (jsonString stage01GateStatus) to:fp
         format "  \"stage01GateJson\": %, \n" (jsonString stage01GateJson) to:fp
         format "  \"bipedRoot\": %, \n" (jsonString (if bipedRoot != undefined then bipedRoot.name else "")) to:fp
@@ -685,7 +1005,11 @@ struct AIRAStage02SkinTool
         format "    {\"id\": \"add_skin_modifier\", \"status\": %, \"note\": %},\n" (jsonString (if objectResults.count > 0 then "done" else "blocked")) (jsonString "Skin modifier is added to model geometry when missing.") to:fp
         format "    {\"id\": \"add_biped_bones_to_skin\", \"status\": %, \"note\": %},\n" (jsonString (if semanticNodeCount > 0 then "done" else "blocked")) (jsonString "Only deforming Biped nodes are added; COM stays control-only.") to:fp
         format "    {\"id\": \"set_bone_affect_limit\", \"status\": %, \"note\": %},\n" (jsonString "attempted") (jsonString "Tutorial demo uses 3; project QC still requires <= 4.") to:fp
-        format "    {\"id\": \"initial_weight_pass\", \"status\": %, \"note\": %},\n" (jsonString (if totalProcessed > 0 then "done_first_pass" else "blocked")) (jsonString "Weights are generated from Biped segment proximity and side/height gates.") to:fp
+        format "    {\"id\": \"initial_weight_pass\", \"status\": %, \"note\": %},\n" (jsonString (if totalProcessed > 0 then "done_first_pass" else "blocked")) (jsonString weightNote) to:fp
+        if hasReferenceTransfer do
+        (
+            format "    {\"id\": \"reference_weight_collapse\", \"status\": %, \"note\": %},\n" (jsonString (if (referenceMetaValue referenceMeta 7 0) > 0 then "done_first_pass" else "blocked")) (jsonString weightNote) to:fp
+        )
         format "    {\"id\": \"remove_zero_weights\", \"status\": %, \"note\": %},\n" (jsonString "attempted") (jsonString "skinOps.RemoveZeroWeights is called when available.") to:fp
         format "    {\"id\": \"deformation_test\", \"status\": %, \"note\": %}\n" (jsonString "required_manual_followup") (jsonString "Tutorial-style head, torso, arm, leg, foot and prop motion tests are still required.") to:fp
         format "  ],\n" to:fp
@@ -698,6 +1022,14 @@ struct AIRAStage02SkinTool
         format "- Scene: `%`\n" (maxFilePath + maxFileName) to:fp
         format "- Generated: `%`\n" localTime to:fp
         format "- Stage01 gate status: `%`\n" stage01GateStatus to:fp
+        format "- Weight source: `%`\n" weightSource to:fp
+        if hasReferenceTransfer do
+        (
+            format "- Reference FBX: `%`\n" (referenceMetaValue referenceMeta 1 "") to:fp
+            format "- Reference Skin object: `%`\n" (referenceMetaValue referenceMeta 2 "") to:fp
+            format "- Reference vertices with mapped weights: `% / %`\n" (referenceMetaValue referenceMeta 7 0) (referenceMetaValue referenceMeta 3 0) to:fp
+            format "- Reference mapped influences: `% / %`\n" (referenceMetaValue referenceMeta 5 0) (referenceMetaValue referenceMeta 4 0) to:fp
+        )
         format "- Biped root: `%`\n" (if bipedRoot != undefined then bipedRoot.name else "") to:fp
         format "- Biped deforming nodes: `%`\n" semanticNodeCount to:fp
         format "- Bone affect limit requested: `%`\n" boneAffectLimit to:fp
@@ -725,11 +1057,13 @@ struct AIRAStage02SkinTool
         format "- Add Biped bones to Skin: `%`\n" (semanticNodeCount > 0) to:fp
         format "- Bone Affect Limit: `%`\n" boneAffectLimit to:fp
         format "- Initial weights: `%`\n" (totalProcessed > 0) to:fp
+        if hasReferenceTransfer do format "- Reference weight collapse: `%`\n" ((referenceMetaValue referenceMeta 7 0) > 0) to:fp
         format "- Remove 0 weights: `attempted`\n" to:fp
         format "- Manual deformation tests: `required`\n" to:fp
         format "\n## Policy Notes\n\n" to:fp
         format "- Biped COM / vertical root is treated as control-only and is not added as a deforming Skin bone.\n" to:fp
         format "- `AIRA_BONE_*` template bones are ignored; Stage02 follows the current Biped-only body flow.\n" to:fp
+        if hasReferenceTransfer do format "- Reference AccuRig-style Skin weights are used only as source data, then collapsed to the simplified Biped deforming set.\n" to:fp
         format "- Accessory/prop-specific weighting is not considered production-complete by this first pass.\n" to:fp
         format "\n## Issues\n\n" to:fp
         if issues.count == 0 then
@@ -803,8 +1137,75 @@ struct AIRAStage02SkinTool
             )
         )
 
-        local reports = writeStage02Reports assetName objectResults issues bipRoot semanticNodes.count stage01GateStatus stage01GateJson
+        local reports = writeStage02Reports assetName objectResults issues bipRoot semanticNodes.count stage01GateStatus stage01GateJson "heuristic_biped_segment_proximity" undefined
         log ("Stage02 report written: " + reports[1])
+        reports
+    ),
+
+    fn runReferenceCollapsedSkin assetName referenceWeights referenceMeta =
+    (
+        if assetName == undefined or assetName == "" do assetName = "current_scene"
+        ensureDir outDir
+        ensureDir (joinPath outDir "data")
+        ensureDir (joinPath outDir "reports")
+
+        local issues = #()
+        local modelNodes = geometryNodes()
+        local bounds = getBounds modelNodes
+        local bipRoot = findBipedRoot()
+        local stage01GateStatus = getEnv "AIRA_STAGE02_STAGE01_GATE_STATUS" "not_provided"
+        local stage01GateJson = getEnv "AIRA_STAGE02_STAGE01_GATE_JSON" ""
+        local hasReferenceWeights = false
+        if referenceWeights != undefined do hasReferenceWeights = referenceWeights.count > 0
+
+        if stage01GateStatus != "skin_setup_ready" do append issues ("Stage01 Skin Prep Gate is not ready (" + stage01GateStatus + "); Stage02 output is research-only and must not be treated as production.")
+        if not hasReferenceWeights do append issues "Reference collapsed weights are empty; cannot run reference-guided Stage02 weights."
+        if (referenceMetaValue referenceMeta 8 0) > 0 do append issues "Reference Skin extraction reported issues; inspect batch summary and listener log."
+        if modelNodes.count == 0 do append issues "No candidate geometry nodes found for Skin."
+        if bounds == undefined do append issues "Could not compute model bounds."
+        if bipRoot == undefined do append issues "No Stage01-style Biped root found."
+
+        local semanticNodes = semanticBipedNodes bipRoot
+        if semanticNodes.count == 0 do append issues "No deforming Biped nodes could be resolved."
+
+        local objectResults = #()
+        if modelNodes.count > 0 and bounds != undefined and bipRoot != undefined and semanticNodes.count > 0 do
+        (
+            for obj in modelNodes do
+            (
+                local skinResult = ensureSkinModifier obj
+                local skinMod = skinResult[1]
+                local existed = skinResult[2]
+                if skinMod == undefined then
+                (
+                    append issues ("Could not add/find Skin modifier on " + obj.name + ".")
+                )
+                else
+                (
+                    setSkinBoneAffectLimit skinMod
+                    local addResult = addBipedBonesToSkin skinMod semanticNodes
+                    local refs = buildInfluenceRefs skinMod semanticNodes
+                    local semanticIndexPairs = semanticSkinBoneIndexPairs skinMod semanticNodes
+                    local pelvisNode = semanticNode semanticNodes "Pelvis"
+                    local fallbackBoneIndex = if pelvisNode != undefined then skinBoneIndexForNode skinMod pelvisNode else 0
+                    if refs.count == 0 do append issues ("No Skin influence refs were built for " + obj.name + ".")
+                    if semanticIndexPairs.count == 0 do append issues ("No semantic Skin bone index map was built for " + obj.name + ".")
+                    if fallbackBoneIndex == 0 do append issues ("Pelvis fallback Skin bone missing for " + obj.name + ".")
+
+                    local applyResult = #(0, 0, 0, 0, 0)
+                    if refs.count > 0 and semanticIndexPairs.count > 0 and fallbackBoneIndex > 0 and hasReferenceWeights do
+                    (
+                        applyResult = applyReferenceCollapsedWeightsToObject obj skinMod semanticIndexPairs referenceWeights refs fallbackBoneIndex bounds
+                    )
+                    local skinBoneCount = 0
+                    try(skinBoneCount = skinOps.GetNumberBones skinMod)catch(skinBoneCount = 0)
+                    append objectResults #(obj.name, existed, skinBoneCount, addResult[1], applyResult[1], applyResult[2], applyResult[3], applyResult[5], applyResult[4])
+                )
+            )
+        )
+
+        local reports = writeStage02Reports assetName objectResults issues bipRoot semanticNodes.count stage01GateStatus stage01GateJson "reference_collapsed_skin_weights" referenceMeta
+        log ("Stage02 reference-collapsed report written: " + reports[1])
         reports
     )
 )

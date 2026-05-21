@@ -288,6 +288,7 @@ def stage02_skin_max_file(
     stage01_skin_prep_gate_json: str = "",
     allow_blocked_stage01: bool = False,
     bone_affect_limit: int = 3,
+    reference_fbx: str = "",
 ) -> dict[str, Any]:
     """Run independent Stage02 Skin setup on an existing Stage01 MAX scene."""
 
@@ -296,6 +297,9 @@ def stage02_skin_max_file(
         raise FileNotFoundError(f"Source MAX scene not found: {source_max}")
     if not 1 <= bone_affect_limit <= 4:
         raise ValueError("bone_affect_limit must be between 1 and 4.")
+    reference = Path(reference_fbx) if reference_fbx else None
+    if reference is not None and not reference.exists():
+        raise FileNotFoundError(f"Reference FBX not found: {reference_fbx}")
 
     safe_asset_name = asset_name or source.stem.replace("_stage01_rig_scene", "")
     cmd = [
@@ -319,6 +323,8 @@ def stage02_skin_max_file(
         cmd.extend(["-Stage01SkinPrepGateJson", str(gate)])
     if allow_blocked_stage01:
         cmd.append("-AllowBlockedStage01")
+    if reference is not None:
+        cmd.extend(["-ReferenceFbx", str(reference)])
 
     completed = subprocess.run(
         cmd,
@@ -345,6 +351,7 @@ def stage02_skin_max_file(
         "assetName": output_name,
         "runRoot": str(out_dir),
         "boneAffectLimit": bone_affect_limit,
+        "referenceFbx": str(reference) if reference is not None else "",
         "batchReturnCode": completed.returncode,
     }
 

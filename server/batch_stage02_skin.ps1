@@ -11,6 +11,8 @@ param(
     [ValidateRange(1, 4)]
     [int]$BoneAffectLimit = 3,
 
+    [string]$ReferenceFbx = "",
+
     [string]$OutDir = "",
 
     [string]$MaxBatch = "D:\Program files\Autodesk\3ds Max 2020\3dsmaxbatch.exe"
@@ -33,6 +35,14 @@ if (-not (Test-Path -LiteralPath $MaxBatch)) {
     throw "3dsmaxbatch.exe not found: $MaxBatch"
 }
 
+$ResolvedReferenceFbx = ""
+if (-not [string]::IsNullOrWhiteSpace($ReferenceFbx)) {
+    if (-not (Test-Path -LiteralPath $ReferenceFbx)) {
+        throw "Reference FBX not found: $ReferenceFbx"
+    }
+    $ResolvedReferenceFbx = (Resolve-Path -LiteralPath $ReferenceFbx).Path
+}
+
 if ([string]::IsNullOrWhiteSpace($AssetName)) {
     $AssetName = [System.IO.Path]::GetFileNameWithoutExtension($SourceMax)
     $AssetName = $AssetName -replace '_stage01_rig_scene$', ''
@@ -47,7 +57,8 @@ else {
 }
 
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$RunDir = Join-Path $OutRoot "$SafeAssetName`__$Timestamp"
+$RunSuffix = if ([string]::IsNullOrWhiteSpace($ResolvedReferenceFbx)) { "" } else { "_refcollapse" }
+$RunDir = Join-Path $OutRoot "$SafeAssetName`__${Timestamp}${RunSuffix}"
 
 $Stage01GateStatus = "not_provided"
 $Stage01GateReady = $false
@@ -87,6 +98,7 @@ $oldSourceMax = [Environment]::GetEnvironmentVariable("AIRA_STAGE02_SOURCE_MAX",
 $oldAssetName = [Environment]::GetEnvironmentVariable("AIRA_STAGE02_ASSET_NAME", "Process")
 $oldOutDir = [Environment]::GetEnvironmentVariable("AIRA_STAGE02_OUT_DIR", "Process")
 $oldAffectLimit = [Environment]::GetEnvironmentVariable("AIRA_STAGE02_BONE_AFFECT_LIMIT", "Process")
+$oldReferenceFbx = [Environment]::GetEnvironmentVariable("AIRA_STAGE02_REFERENCE_FBX", "Process")
 $oldGateStatus = [Environment]::GetEnvironmentVariable("AIRA_STAGE02_STAGE01_GATE_STATUS", "Process")
 $oldGateJson = [Environment]::GetEnvironmentVariable("AIRA_STAGE02_STAGE01_GATE_JSON", "Process")
 $BatchReturnCode = 0
@@ -96,6 +108,7 @@ try {
     $env:AIRA_STAGE02_ASSET_NAME = $SafeAssetName
     $env:AIRA_STAGE02_OUT_DIR = $RunDir
     $env:AIRA_STAGE02_BONE_AFFECT_LIMIT = [string]$BoneAffectLimit
+    $env:AIRA_STAGE02_REFERENCE_FBX = $ResolvedReferenceFbx
     $env:AIRA_STAGE02_STAGE01_GATE_STATUS = $Stage01GateStatus
     $env:AIRA_STAGE02_STAGE01_GATE_JSON = $ResolvedGateJson
 
@@ -113,6 +126,7 @@ finally {
     if ($null -eq $oldAssetName) { Remove-Item Env:AIRA_STAGE02_ASSET_NAME -ErrorAction SilentlyContinue } else { $env:AIRA_STAGE02_ASSET_NAME = $oldAssetName }
     if ($null -eq $oldOutDir) { Remove-Item Env:AIRA_STAGE02_OUT_DIR -ErrorAction SilentlyContinue } else { $env:AIRA_STAGE02_OUT_DIR = $oldOutDir }
     if ($null -eq $oldAffectLimit) { Remove-Item Env:AIRA_STAGE02_BONE_AFFECT_LIMIT -ErrorAction SilentlyContinue } else { $env:AIRA_STAGE02_BONE_AFFECT_LIMIT = $oldAffectLimit }
+    if ($null -eq $oldReferenceFbx) { Remove-Item Env:AIRA_STAGE02_REFERENCE_FBX -ErrorAction SilentlyContinue } else { $env:AIRA_STAGE02_REFERENCE_FBX = $oldReferenceFbx }
     if ($null -eq $oldGateStatus) { Remove-Item Env:AIRA_STAGE02_STAGE01_GATE_STATUS -ErrorAction SilentlyContinue } else { $env:AIRA_STAGE02_STAGE01_GATE_STATUS = $oldGateStatus }
     if ($null -eq $oldGateJson) { Remove-Item Env:AIRA_STAGE02_STAGE01_GATE_JSON -ErrorAction SilentlyContinue } else { $env:AIRA_STAGE02_STAGE01_GATE_JSON = $oldGateJson }
 }
@@ -125,6 +139,8 @@ $Result = [ordered]@{
     stage01GateStatus = $Stage01GateStatus
     stage01SkinPrepGateJson = $ResolvedGateJson
     boneAffectLimit = $BoneAffectLimit
+    referenceFbx = $ResolvedReferenceFbx
+    weightMode = if ([string]::IsNullOrWhiteSpace($ResolvedReferenceFbx)) { "heuristic_biped_segment_proximity" } else { "reference_collapsed_skin_weights" }
     scene = Join-Path $RunDir "scene\$SafeAssetName`_stage02_skin_scene.max"
     summary = Join-Path $RunDir "reports\$SafeAssetName`_stage02_batch_summary.md"
     stage02SkinReportJson = Join-Path $RunDir "data\$SafeAssetName`_stage02_skin_report.json"

@@ -147,7 +147,7 @@ F:\workspace\github\3dsmax-ai-rig-assistant\server\run_mcp_server.ps1
 | `stage01_rig_fbx_file` | 用 `3dsmaxbatch.exe` 离线生成 Stage01 视觉候选、证据包、可选 VLM 签核和 Skin gate，只允许 `tutorial_centerline_qbird` |
 | `stage02_load_tool` | 在 Max 中加载独立 Stage02 Skin 工具 |
 | `stage02_skin_current_scene` | 对当前 Max 场景执行 Stage02 初始 Skin 设置，未提供 gate 时仅为研究输出 |
-| `stage02_skin_max_file` | 用 `3dsmaxbatch.exe` 从 Stage01 `.max` 场景独立执行 Skin 设置和第一版权重，默认要求 Skin gate 通过 |
+| `stage02_skin_max_file` | 用 `3dsmaxbatch.exe` 从 Stage01 `.max` 场景独立执行 Skin 设置和第一版权重，可选用参考 FBX 权重压缩，默认要求 Skin gate 通过 |
 
 旧的多算法 benchmark、`qualityScore` 排序和 `default_recommended/` 提升流程已经禁用。相关历史文件只作为回溯材料，不再作为默认入口。
 

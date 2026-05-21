@@ -27,12 +27,14 @@ MCP 入口只暴露白名单工具，不让 AI 任意执行 MaxScript。
 | `maxscript/aira_mcp_bridge.ms` | 3ds Max 内部 MCP/TCP 桥接脚本 |
 | `maxscript/batch_asset_qc_fbx.ms` | `3dsmaxbatch.exe` 离线检测 FBX 的 MaxScript |
 | `maxscript/batch_stage02_skin.ms` | `3dsmaxbatch.exe` 离线执行 Stage02 Skin 的 MaxScript |
+| `maxscript/batch_stage02_deform_test.ms` | `3dsmaxbatch.exe` 离线执行 Stage02 动作变形 smoke test 的 MaxScript |
 | `server/mcp_server.py` | Python MCP server，暴露白名单工具 |
 | `server/direct_cli.py` | 不经过 MCP 客户端的直连测试命令 |
 | `server/run_mcp_server.ps1` | 手动启动 MCP server |
 | `server/stage01_auto.ps1` | 直连执行 Stage01 粗自动流程 |
 | `server/batch_qc_fbx.ps1` | 离线检测任意本地 FBX |
 | `server/batch_stage02_skin.ps1` | 从 Stage01 `.max` 场景独立执行 Stage02 Skin |
+| `server/batch_stage02_deform_test.ps1` | 从 Stage02 `.max` 场景独立执行动作变形 smoke test |
 | `server/batch_qc_luxun.ps1` | 陆逊模型的离线检测样例 |
 | `server/benchmark_luxun_algorithms.ps1` | 旧算法评分入口，生产默认禁用 |
 | `server/check_algorithm_default.ps1` | 旧推荐检查入口，生产默认禁用 |
@@ -134,7 +136,7 @@ F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage02_skin.ps1 `
   -Stage01SkinPrepGateJson "F:\workspace\github\3dsmax-ai-rig-assistant\out\runs\luxun_model__YYYYMMDD_HHMMSS\data\luxun_model_stage01_skin_prep_gate.json"
 ```
 
-它会添加/复用 `Skin` 修改器，把变形用 Biped 节点加入 Skin，按教程默认把 Bone Affect Limit 设为 `3`，再用 Biped 段距离、左右侧和高度区域做第一轮权重。输出放在 `out/stage02_runs/<assetName>__YYYYMMDD_HHMMSS/`，详见 `docs/stage02-skin-workflow.md`。
+它会添加/复用 `Skin` 修改器，把变形用 Biped 节点加入 Skin，按教程默认把 Bone Affect Limit 设为 `3`，再用 Biped 段距离、左右侧和高度区域做第一轮权重。若同拓扑资产有已蒙皮参考答案，可额外传 `-ReferenceFbx`，脚本会读取参考 Skin 权重并压缩映射到当前 21 个简化 Biped 变形骨上，避免纯距离猜权重。输出放在 `out/stage02_runs/<assetName>__YYYYMMDD_HHMMSS/` 或 `out/stage02_runs/<assetName>__YYYYMMDD_HHMMSS_refcollapse/`，详见 `docs/stage02-skin-workflow.md`。
 
 整理已有输出目录：
 

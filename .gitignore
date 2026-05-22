@@ -18,7 +18,6 @@ __pycache__/
 # Generated tool outputs
 out/
 out_archives/
-out_ct_probe*/
 report/
 
 # Local source assets used for experiments; keep these out of git.

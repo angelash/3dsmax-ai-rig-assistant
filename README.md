@@ -160,6 +160,8 @@ F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspac
 
 跨 run 的截图索引写入 `out/_indexes/screenshot_output_pairs.md/json`。
 
+实验性探针和参数对比统一放在 `out/experiments/<experiment_name>/`。不要在仓库根目录创建 `out_ct_probe*` 这类平级输出目录；如果需要区分实验批次，在 `out/experiments/` 下面分目录。
+
 ## 旧算法评分已停用
 
 旧的多算法 benchmark、qualityScore 排序、默认推荐检查和推荐提升都已经从生产链路中屏蔽。相关脚本默认会直接报错，只有显式加研究用参数时才允许查看历史归档。

@@ -59,6 +59,10 @@
 - `index.html`：浏览器入口，显示大图和行列索引。
 - `index.md`：纯文本索引，记录大图中每个模型所在行列、run README 和关键 flags。
 
+## 实验输出
+
+临时探针、抽样重跑、参数对比等实验性输出必须放在 `out/experiments/<experiment_name>/` 下，不要在工程根目录创建 `out_ct_probe*`、`out_test*` 这类平级目录。`out/` 整体已忽略，根目录误建的新实验目录应该在 `git status` 中暴露出来并迁回 `out/experiments/`。
+
 ## 限制
 
 这个布局不等于生产交付。图里的 Biped 仍是由 Guide 初始化并经 CT 切片保守修正后的候选骨架，不是参考答案骨架，也不是完成 Skin 权重后的生产交付。

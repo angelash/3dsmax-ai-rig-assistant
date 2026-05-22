@@ -1598,11 +1598,8 @@ struct AIRAStage01Tool
         )
     ),
 
-    fn ctVolumeDiagnostics bipRoot =
+    fn ctVolumeDiagnosticsFromSamples bipRoot pts h =
     (
-        local pts = envelopeSamplePoints()
-        local h = guideHeightSpan()
-        if h <= 1.0 do h = defaultHeight
         local failures = 0
         local maxOffset = 0.0
         local samples = 0
@@ -1625,6 +1622,14 @@ struct AIRAStage01Tool
             )
             #(failures, maxOffset, samples, missing)
         )
+    ),
+
+    fn ctVolumeDiagnostics bipRoot =
+    (
+        local pts = envelopeSamplePoints()
+        local h = guideHeightSpan()
+        if h <= 1.0 do h = defaultHeight
+        ctVolumeDiagnosticsFromSamples bipRoot pts h
     ),
 
     fn clampVectorStep vec maxStep =
@@ -1745,6 +1750,25 @@ struct AIRAStage01Tool
         (
             local diag = ctSegmentDiagnostics bipRoot seg pts h
             failures += diag[1]
+        )
+        failures
+    ),
+
+    fn ctSegmentsShareNode a b =
+    (
+        (a[1] == b[1]) or (a[1] == b[2]) or (a[2] == b[1]) or (a[2] == b[2])
+    ),
+
+    fn ctRelatedFailureCount bipRoot activeSeg pts h =
+    (
+        local failures = 0
+        for seg in orderedCtRefineSegments() do
+        (
+            if ctSegmentsShareNode seg activeSeg do
+            (
+                local diag = ctSegmentDiagnostics bipRoot seg pts h
+                failures += diag[1]
+            )
         )
         failures
     ),
@@ -1901,13 +1925,21 @@ struct AIRAStage01Tool
     (
         local activeDiag = ctSegmentDiagnostics bipRoot seg pts h
         local lockedFailures = ctLockedFailureCount bipRoot lockedSegments pts h
-        #(activeDiag[1], lockedFailures, 0, activeDiag[2])
+        local relatedFailures = ctRelatedFailureCount bipRoot seg pts h
+        #(activeDiag[1], lockedFailures, relatedFailures, 0, activeDiag[2])
     ),
 
     fn ctTrialScoreBetter trialScore bestScore =
     (
         (trialScore[1] < bestScore[1]) or \
-        (trialScore[1] == bestScore[1] and trialScore[4] < bestScore[4])
+        (trialScore[1] == bestScore[1] and trialScore[3] < bestScore[3]) or \
+        (trialScore[1] == bestScore[1] and trialScore[3] == bestScore[3] and trialScore[5] < bestScore[5])
+    ),
+
+    fn ctVolumeDiagBetter trialDiag bestDiag =
+    (
+        (trialDiag[1] < bestDiag[1]) or \
+        (trialDiag[1] == bestDiag[1] and trialDiag[2] < bestDiag[2])
     ),
 
     fn ctRefineSegmentCandidateSearch bipRoot seg lockedSegments pts h maxSegmentIterations allowStartBacktrack =
@@ -1949,7 +1981,7 @@ struct AIRAStage01Tool
                         if setBipedNodePosition node (oldPos + move) do
                         (
                             local trialScore = ctScoreSegment bipRoot seg lockedSegments pts h
-                            if trialScore[2] <= currentScore[2] and (ctTrialScoreBetter trialScore bestScore) do
+                            if trialScore[2] <= currentScore[2] and trialScore[3] <= currentScore[3] and (ctTrialScoreBetter trialScore bestScore) do
                             (
                                 bestScore = trialScore
                                 bestMove = move
@@ -2456,6 +2488,9 @@ struct AIRAStage01Tool
 
         for seg in orderedCtRefineSegments() while not converged do
         (
+            log ("CT refine segment start: " + (seg[1] as string) + "->" + (seg[2] as string) + ", currentFailures=" + (diag[1] as string))
+            local segmentStartPositions = ctCaptureBipedPositions bipRoot
+            local segmentStartDiag = diag
             local segSearch = ctRefineSegmentCandidateSearch bipRoot seg lockedSegments pts h maxSegmentIterations false
             local beforeScore = segSearch[1]
             local afterScore = segSearch[2]
@@ -2463,24 +2498,47 @@ struct AIRAStage01Tool
             local acceptedMoves = segSearch[4]
             local stopReason = segSearch[5]
             iterations += segmentIterations
-            local beforeDiag = #(beforeScore[1], beforeScore[4])
+            local beforeDiag = #(beforeScore[1], beforeScore[5])
+            local postSegmentDiag = ctVolumeDiagnosticsFromSamples bipRoot pts h
+            if postSegmentDiag[1] > segmentStartDiag[1] do
+            (
+                ctRestoreBipedPositions bipRoot segmentStartPositions
+                postSegmentDiag = segmentStartDiag
+                stopReason = stopReason + "_reverted_global_regression"
+            )
             local finalSegDiag = ctSegmentDiagnostics bipRoot seg pts h
             if finalSegDiag[1] == 0 do append lockedSegments seg
-            append traceItems ((seg[1] as string) + "->" + (seg[2] as string) + " before=" + (beforeDiag[1] as string) + "/" + (beforeDiag[2] as string) + ", after=" + (afterScore[1] as string) + "/" + (afterScore[4] as string) + ", lockedFailures=" + (afterScore[2] as string) + ", iter=" + (segmentIterations as string) + ", moves=" + (acceptedMoves as string) + ", stop=" + stopReason + ", locked=" + (lockedSegments.count as string))
+            append traceItems ((seg[1] as string) + "->" + (seg[2] as string) + " before=" + (beforeDiag[1] as string) + "/" + (beforeDiag[2] as string) + ", after=" + (afterScore[1] as string) + "/" + (afterScore[5] as string) + ", lockedFailures=" + (afterScore[2] as string) + ", relatedFailures=" + (afterScore[3] as string) + ", globalFailures=" + (postSegmentDiag[1] as string) + ", iter=" + (segmentIterations as string) + ", moves=" + (acceptedMoves as string) + ", stop=" + stopReason + ", locked=" + (lockedSegments.count as string))
+            log ("CT refine segment done: " + (seg[1] as string) + "->" + (seg[2] as string) + ", activeFailures=" + (finalSegDiag[1] as string) + ", globalFailures=" + (postSegmentDiag[1] as string) + ", stop=" + stopReason)
 
-            diag = ctVolumeDiagnostics bipRoot
+            diag = postSegmentDiag
             converged = (diag[1] == 0)
         )
 
-        if diag[1] > initialFailures do
+        if not converged do
         (
-            append traceItems ("ordered result regressed total strictCtFailures " + (initialFailures as string) + " -> " + (diag[1] as string) + "; restoring initial Biped positions and running legacy global fallback")
+            local orderedPositions = ctCaptureBipedPositions bipRoot
+            local orderedDiag = diag
+            append traceItems ("ordered result not fully converged strictCtFailures " + (initialFailures as string) + " -> " + (orderedDiag[1] as string) + "; probing legacy global fallback and keeping the better result")
             ctRestoreBipedPositions bipRoot initialPositions
             local legacyResult = ctLegacyGlobalRefine bipRoot pts h maxIterations traceItems
-            diag = legacyResult[1]
             iterations += legacyResult[2]
-            converged = legacyResult[3]
-            refineMode = "ordered_root_first_candidate_ct_refinement_with_legacy_regression_fallback"
+            local legacyDiag = legacyResult[1]
+            if ctVolumeDiagBetter legacyDiag orderedDiag then
+            (
+                diag = legacyDiag
+                converged = legacyResult[3]
+                refineMode = "ordered_root_first_candidate_ct_refinement_with_best_of_legacy_fallback"
+                append traceItems ("legacy global fallback kept strictCtFailures " + (orderedDiag[1] as string) + " -> " + (legacyDiag[1] as string))
+            )
+            else
+            (
+                ctRestoreBipedPositions bipRoot orderedPositions
+                diag = orderedDiag
+                converged = (diag[1] == 0)
+                refineMode = "ordered_root_first_candidate_ct_refinement_with_legacy_probe_kept_ordered"
+                append traceItems ("legacy global fallback rejected strictCtFailures " + (legacyDiag[1] as string) + " vs ordered " + (orderedDiag[1] as string))
+            )
         )
 
         local syncCount = syncGuidesToBiped bipRoot

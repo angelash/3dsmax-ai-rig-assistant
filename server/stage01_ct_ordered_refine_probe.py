@@ -232,12 +232,21 @@ def candidate_moves(snapshot: dict[str, Any], start: str, end: str, node: str, m
     return list(unique.values())
 
 
-def score(snapshot: dict[str, Any], locked: list[tuple[str, str]], active: tuple[str, str]) -> tuple[int, int, int]:
+def segments_share_node(a: tuple[str, str], b: tuple[str, str]) -> bool:
+    return a[0] in b or a[1] in b
+
+
+def score(snapshot: dict[str, Any], locked: list[tuple[str, str]], active: tuple[str, str]) -> tuple[int, int, int, int]:
     result = evaluate(snapshot)
     active_key = f"{active[0]}->{active[1]}"
     locked_failures = sum(result["bySegment"].get(f"{s}->{e}", 0) for s, e in locked)
+    related_failures = sum(
+        result["bySegment"].get(f"{s}->{e}", 0)
+        for s, e in ORDERED_SEGMENTS
+        if segments_share_node((s, e), active)
+    )
     active_failures = result["bySegment"].get(active_key, 0)
-    return active_failures, locked_failures, result["failureCount"]
+    return active_failures, locked_failures, related_failures, result["failureCount"]
 
 
 def refine_segment(
@@ -283,11 +292,17 @@ def refine_segment(
                 trial_nodes[move_node] = vec_add(trial_nodes[move_node], move)
                 update_snapshot_nodes(trial, trial_nodes)
                 trial_score = score(trial, locked, segment)
-                # Locked sections must not regress. Prefer active improvement, then global improvement.
-                if trial_score[1] > current[1]:
+                # Locked, adjacent, and global sections must not regress.
+                if trial_score[1] > current[1] or trial_score[2] > current[2] or trial_score[3] > current[3]:
                     continue
-                better = trial_score[0] < best_score[0] or (
-                    trial_score[0] == best_score[0] and trial_score[2] < best_score[2]
+                better = (
+                    trial_score[0] < best_score[0]
+                    or (trial_score[0] == best_score[0] and trial_score[2] < best_score[2])
+                    or (
+                        trial_score[0] == best_score[0]
+                        and trial_score[2] == best_score[2]
+                        and trial_score[3] < best_score[3]
+                    )
                 )
                 if better:
                     best_snapshot = trial
@@ -305,7 +320,12 @@ def refine_segment(
                 "iteration": iteration,
                 "moveNode": best_move_node,
                 "move": [round(v, 6) for v in (best_move or [0.0, 0.0, 0.0])],
-                "score": {"active": best_score[0], "locked": best_score[1], "global": best_score[2]},
+                "score": {
+                    "active": best_score[0],
+                    "locked": best_score[1],
+                    "related": best_score[2],
+                    "global": best_score[3],
+                },
             }
         )
         current = best_score
@@ -368,6 +388,11 @@ def main() -> int:
         default="standard",
         help="standard uses 0/25/50/75/100; dense adds midpoints for evidence escalation.",
     )
+    parser.add_argument(
+        "--skip-slice-images",
+        action="store_true",
+        help="Only write JSON/Markdown probe outputs; useful for fast algorithm regression samples.",
+    )
     args = parser.parse_args()
 
     snapshot_path = Path(args.snapshot_json)
@@ -387,10 +412,11 @@ def main() -> int:
 
     write_json(out_dir / f"{asset_name}_ordered_ct_probe.json", result)
     write_json(out_dir / f"{asset_name}_ordered_ct_snapshot.json", working)
-    slice_dir = out_dir / "slices"
-    slice_dir.mkdir(parents=True, exist_ok=True)
-    _, slice_analysis = write_slice_analysis(out_dir, asset_name, working, slice_dir)
-    write_json(out_dir / "slice_analysis.json", slice_analysis)
+    if not args.skip_slice_images:
+        slice_dir = out_dir / "slices"
+        slice_dir.mkdir(parents=True, exist_ok=True)
+        _, slice_analysis = write_slice_analysis(out_dir, asset_name, working, slice_dir)
+        write_json(out_dir / "slice_analysis.json", slice_analysis)
 
     md_lines = [
         f"# Ordered CT Probe: {asset_name}",
@@ -400,7 +426,7 @@ def main() -> int:
         f"- Locked green segments: `{len(result['lockedSegments'])}` / `{len(ORDERED_SEGMENTS)}`",
         f"- Max local step: `{result['maxStep']}`",
         "",
-        "| Segment | Before active/locked/global | After active/locked/global | Moves | Stop |",
+        "| Segment | Before active/locked/related/global | After active/locked/related/global | Moves | Stop |",
         "| --- | --- | --- | ---: | --- |",
     ]
     for item in result["segments"]:

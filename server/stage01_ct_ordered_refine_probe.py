@@ -47,6 +47,29 @@ ORDERED_SEGMENTS: list[tuple[str, str]] = [
     ("R_Elbow", "R_Wrist"),
 ]
 
+LEG_CHAINS: list[dict[str, Any]] = [
+    {
+        "name": "left_leg",
+        "nodes": ["L_Hip", "L_Knee", "L_Ankle", "L_Toe"],
+        "segments": [
+            ("Pelvis", "L_Hip"),
+            ("L_Hip", "L_Knee"),
+            ("L_Knee", "L_Ankle"),
+            ("L_Ankle", "L_Toe"),
+        ],
+    },
+    {
+        "name": "right_leg",
+        "nodes": ["R_Hip", "R_Knee", "R_Ankle", "R_Toe"],
+        "segments": [
+            ("Pelvis", "R_Hip"),
+            ("R_Hip", "R_Knee"),
+            ("R_Knee", "R_Ankle"),
+            ("R_Ankle", "R_Toe"),
+        ],
+    },
+]
+
 PROBE_STATIONS = list(SLICE_SAMPLE_STATIONS)
 
 
@@ -118,6 +141,10 @@ def update_snapshot_nodes(snapshot: dict[str, Any], nodes: dict[str, list[float]
             bone["endPosition"] = [round(v, 6) for v in nodes[end]]
         if start in nodes and end in nodes:
             bone["boneLength"] = round(vec_length(vec_sub(nodes[end], nodes[start])), 6)
+
+
+def clone_nodes(nodes: dict[str, list[float]]) -> dict[str, list[float]]:
+    return {name: list(value) for name, value in nodes.items()}
 
 
 def segment_axes(start: list[float], end: list[float]) -> tuple[list[float], list[float], list[float], float]:
@@ -232,6 +259,34 @@ def candidate_moves(snapshot: dict[str, Any], start: str, end: str, node: str, m
     return list(unique.values())
 
 
+def unique_moves(moves: list[list[float]]) -> list[list[float]]:
+    unique: dict[tuple[int, int, int], list[float]] = {}
+    for move in moves:
+        if vec_length(move) <= 1e-6:
+            continue
+        key = tuple(int(round(v * 1000)) for v in move)
+        unique[key] = move
+    return list(unique.values())
+
+
+def chain_translation_moves(
+    snapshot: dict[str, Any],
+    chain_segments: list[tuple[str, str]],
+    max_step: float,
+) -> list[list[float]]:
+    moves: list[list[float]] = []
+    for start, end in chain_segments:
+        for sample in segment_samples(snapshot, start, end):
+            if sample["strict"] or sample["pointCount"] < 12:
+                continue
+            offset = sample.get("offset3d") or [0.0, 0.0, 0.0]
+            if vec_length(offset) <= 1e-6:
+                continue
+            move = clamp(offset, max_step)
+            moves.extend([move, vec_scale(move, 0.5), vec_scale(move, 0.25)])
+    return unique_moves(moves)
+
+
 def segments_share_node(a: tuple[str, str], b: tuple[str, str]) -> bool:
     return a[0] in b or a[1] in b
 
@@ -247,6 +302,130 @@ def score(snapshot: dict[str, Any], locked: list[tuple[str, str]], active: tuple
     )
     active_failures = result["bySegment"].get(active_key, 0)
     return active_failures, locked_failures, related_failures, result["failureCount"]
+
+
+def chain_score(snapshot: dict[str, Any], chain_segments: list[tuple[str, str]]) -> tuple[int, int, int]:
+    result = evaluate(snapshot)
+    keys = {f"{start}->{end}" for start, end in chain_segments}
+    chain_failures = sum(result["bySegment"].get(key, 0) for key in keys)
+    global_failures = result["failureCount"]
+    outside_failures = global_failures - chain_failures
+    return chain_failures, outside_failures, global_failures
+
+
+def refine_leg_chain(
+    snapshot: dict[str, Any],
+    chain: dict[str, Any],
+    *,
+    max_chain_iters: int,
+    max_step: float,
+    allow_node_moves: bool,
+) -> dict[str, Any]:
+    chain_segments = [(str(start), str(end)) for start, end in chain["segments"]]
+    chain_nodes = [str(node) for node in chain["nodes"]]
+    current = chain_score(snapshot, chain_segments)
+    before = current
+    trace: list[dict[str, Any]] = []
+    accepted_moves = 0
+    stop_reason = "already_green" if current[0] == 0 else "no_positive_candidate"
+    if current[0] == 0:
+        return {
+            "chain": chain["name"],
+            "before": current,
+            "after": current,
+            "acceptedMoves": 0,
+            "stopReason": stop_reason,
+            "trace": trace,
+        }
+
+    for iteration in range(1, max_chain_iters + 1):
+        nodes = node_positions(snapshot)
+        best_nodes: dict[str, list[float]] | None = None
+        best_score = current
+        best_move: list[float] | None = None
+        best_move_node = "chain"
+
+        original_nodes = node_positions(snapshot)
+        for move in chain_translation_moves(snapshot, chain_segments, max_step):
+            trial_nodes = clone_nodes(original_nodes)
+            missing = False
+            for node in chain_nodes:
+                if node not in trial_nodes:
+                    missing = True
+                    break
+                trial_nodes[node] = vec_add(trial_nodes[node], move)
+            if missing:
+                continue
+            update_snapshot_nodes(snapshot, trial_nodes)
+            trial_score = chain_score(snapshot, chain_segments)
+            update_snapshot_nodes(snapshot, original_nodes)
+            if trial_score[1] > current[1] or trial_score[2] > current[2]:
+                continue
+            better = trial_score[0] < best_score[0] or (
+                trial_score[0] == best_score[0] and trial_score[2] < best_score[2]
+            )
+            if better:
+                best_nodes = trial_nodes
+                best_score = trial_score
+                best_move = move
+                best_move_node = "chain"
+
+        if allow_node_moves:
+            for move_node in chain_nodes:
+                if move_node not in nodes:
+                    continue
+                adjacent_segments = [segment for segment in chain_segments if move_node in segment]
+                moves: list[list[float]] = []
+                for start, end in adjacent_segments:
+                    moves.extend(candidate_moves(snapshot, start, end, move_node, max_step))
+                for move in unique_moves(moves):
+                    trial_nodes = clone_nodes(original_nodes)
+                    trial_nodes[move_node] = vec_add(trial_nodes[move_node], move)
+                    update_snapshot_nodes(snapshot, trial_nodes)
+                    trial_score = chain_score(snapshot, chain_segments)
+                    update_snapshot_nodes(snapshot, original_nodes)
+                    if trial_score[1] > current[1] or trial_score[2] > current[2]:
+                        continue
+                    better = trial_score[0] < best_score[0] or (
+                        trial_score[0] == best_score[0] and trial_score[2] < best_score[2]
+                    )
+                    if better:
+                        best_nodes = trial_nodes
+                        best_score = trial_score
+                        best_move = move
+                        best_move_node = move_node
+
+        if best_nodes is None or best_score == current:
+            stop_reason = "no_positive_candidate"
+            break
+
+        update_snapshot_nodes(snapshot, best_nodes)
+        accepted_moves += 1
+        trace.append(
+            {
+                "iteration": iteration,
+                "moveNode": best_move_node,
+                "move": [round(v, 6) for v in (best_move or [0.0, 0.0, 0.0])],
+                "score": {
+                    "chain": best_score[0],
+                    "outside": best_score[1],
+                    "global": best_score[2],
+                },
+            }
+        )
+        current = best_score
+        stop_reason = "chain_green" if current[0] == 0 else "improving"
+        if current[0] == 0:
+            break
+
+    return {
+        "chain": chain["name"],
+        "before": before,
+        "after": current,
+        "acceptedMoves": accepted_moves,
+        "stopReason": stop_reason,
+        "trace": trace,
+    }
 
 
 def refine_segment(
@@ -279,19 +458,20 @@ def refine_segment(
         if end not in nodes:
             stop_reason = "missing_child_node"
             break
-        best_snapshot: dict[str, Any] | None = None
+        best_nodes: dict[str, list[float]] | None = None
         best_score = current
         best_move: list[float] | None = None
         move_nodes = (end, start) if allow_start_backtrack else (end,)
+        original_nodes = node_positions(snapshot)
         for move_node in move_nodes:
             if move_node not in nodes:
                 continue
             for move in candidate_moves(snapshot, start, end, move_node, max_step):
-                trial = copy.deepcopy(snapshot)
-                trial_nodes = node_positions(trial)
+                trial_nodes = clone_nodes(original_nodes)
                 trial_nodes[move_node] = vec_add(trial_nodes[move_node], move)
-                update_snapshot_nodes(trial, trial_nodes)
-                trial_score = score(trial, locked, segment)
+                update_snapshot_nodes(snapshot, trial_nodes)
+                trial_score = score(snapshot, locked, segment)
+                update_snapshot_nodes(snapshot, original_nodes)
                 # Locked, adjacent, and global sections must not regress.
                 if trial_score[1] > current[1] or trial_score[2] > current[2] or trial_score[3] > current[3]:
                     continue
@@ -305,15 +485,14 @@ def refine_segment(
                     )
                 )
                 if better:
-                    best_snapshot = trial
+                    best_nodes = trial_nodes
                     best_score = trial_score
                     best_move = move
                     best_move_node = move_node
-        if best_snapshot is None or best_score == current:
+        if best_nodes is None or best_score == current:
             stop_reason = "no_positive_candidate"
             break
-        snapshot.clear()
-        snapshot.update(best_snapshot)
+        update_snapshot_nodes(snapshot, best_nodes)
         accepted_moves += 1
         trace.append(
             {
@@ -342,7 +521,16 @@ def refine_segment(
     }
 
 
-def run_probe(snapshot: dict[str, Any], max_segment_iters: int, allow_start_backtrack: bool, max_step_ratio: float) -> dict[str, Any]:
+def run_probe(
+    snapshot: dict[str, Any],
+    max_segment_iters: int,
+    allow_start_backtrack: bool,
+    max_step_ratio: float,
+    *,
+    leg_chain_pass: bool,
+    max_chain_iters: int,
+    leg_chain_node_moves: bool,
+) -> dict[str, Any]:
     bounds = snapshot.get("bounds", {})
     height = max(float(bounds.get("size", [0, 0, 1])[2]), 1.0)
     max_step = max(height * max_step_ratio, 1.0)
@@ -361,16 +549,33 @@ def run_probe(snapshot: dict[str, Any], max_segment_iters: int, allow_start_back
         segment_results.append(result)
         if result["after"][0] == 0:
             locked.append(segment)
+    chain_results: list[dict[str, Any]] = []
+    if leg_chain_pass:
+        for chain in LEG_CHAINS:
+            before = chain_score(snapshot, [(str(s), str(e)) for s, e in chain["segments"]])
+            result = refine_leg_chain(
+                snapshot,
+                chain,
+                max_chain_iters=max_chain_iters,
+                max_step=max_step,
+                allow_node_moves=leg_chain_node_moves,
+            )
+            result["before"] = before
+            chain_results.append(result)
     final = evaluate(snapshot)
     return {
         "mode": "ordered_agent_controlled_ct_probe",
         "maxSegmentIterations": max_segment_iters,
         "allowStartBacktrack": allow_start_backtrack,
+        "legChainPass": leg_chain_pass,
+        "maxChainIterations": max_chain_iters,
+        "legChainNodeMoves": leg_chain_node_moves,
         "maxStep": round(max_step, 6),
         "initial": initial,
         "final": final,
         "lockedSegments": [f"{s}->{e}" for s, e in locked],
         "segments": segment_results,
+        "chains": chain_results,
     }
 
 
@@ -382,6 +587,9 @@ def main() -> int:
     parser.add_argument("--max-segment-iters", type=int, default=16)
     parser.add_argument("--allow-start-backtrack", action="store_true")
     parser.add_argument("--max-step-ratio", type=float, default=0.035)
+    parser.add_argument("--leg-chain-pass", action="store_true")
+    parser.add_argument("--max-chain-iters", type=int, default=6)
+    parser.add_argument("--leg-chain-node-moves", action="store_true")
     parser.add_argument(
         "--station-mode",
         choices=["standard", "dense"],
@@ -407,7 +615,15 @@ def main() -> int:
     asset_name = args.asset_name or str(snapshot.get("assetName") or snapshot_path.stem)
 
     working = copy.deepcopy(snapshot)
-    result = run_probe(working, args.max_segment_iters, args.allow_start_backtrack, args.max_step_ratio)
+    result = run_probe(
+        working,
+        args.max_segment_iters,
+        args.allow_start_backtrack,
+        args.max_step_ratio,
+        leg_chain_pass=args.leg_chain_pass,
+        max_chain_iters=args.max_chain_iters,
+        leg_chain_node_moves=args.leg_chain_node_moves,
+    )
     update_snapshot_nodes(working, node_positions(working))
 
     write_json(out_dir / f"{asset_name}_ordered_ct_probe.json", result)
@@ -439,6 +655,20 @@ def main() -> int:
                 item["stopReason"],
             )
         )
+    if result["chains"]:
+        md_lines += ["", "## Leg Chain Pass", ""]
+        md_lines.append("| Chain | Before chain/outside/global | After chain/outside/global | Moves | Stop |")
+        md_lines.append("| --- | --- | --- | ---: | --- |")
+        for item in result["chains"]:
+            md_lines.append(
+                "| `{}` | `{}` | `{}` | `{}` | `{}` |".format(
+                    item["chain"],
+                    item["before"],
+                    item["after"],
+                    item["acceptedMoves"],
+                    item["stopReason"],
+                )
+            )
     if result["final"]["failures"]:
         md_lines += ["", "## Remaining Failures", ""]
         for failure in result["final"]["failures"]:

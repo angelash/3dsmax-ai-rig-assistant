@@ -48,9 +48,17 @@
 - 先读 run 根目录 `README.md`。
 - 判断候选骨架位置时，优先看 `07_wire_bone_technical_views/`。
 - 看角色语义上下文时，对照 `06_textured_model_views/`。
-- 看局部证据和 blocker 时，进入 `08_visual_review_evidence/`。
+- 看局部证据和 blocker 时，进入 `08_visual_review_evidence/`；其中 `slices/` 是 CT-style 逐关节切片，红框或红叉表示骨心未被局部点云截面严格包裹。
 - 需要继续编辑时，打开 `01_scene_workspace/*.max`。
+
+## 横向报告
+
+全量复查报告由 `server/build_stage01_audit_report.py` 从 `out/runs` 生成到 `report/<pack>/`。报告按“同一种图横向看所有模型”组织，每个图组目录只保留：
+
+- `contact_sheet.png`：把该阶段/视角的所有模型拼成一张大图，红框表示当前 run 仍有机械或 CT blocker。
+- `index.html`：浏览器入口，显示大图和行列索引。
+- `index.md`：纯文本索引，记录大图中每个模型所在行列、run README 和关键 flags。
 
 ## 限制
 
-这个布局不改变算法本身，只改善交付和复查方式。图里的 Biped 仍是由自动 Guide 拟合出来的候选骨架，不是参考答案骨架，也不是完成 Skin 权重后的生产交付。
+这个布局不等于生产交付。图里的 Biped 仍是由 Guide 初始化并经 CT 切片保守修正后的候选骨架，不是参考答案骨架，也不是完成 Skin 权重后的生产交付。

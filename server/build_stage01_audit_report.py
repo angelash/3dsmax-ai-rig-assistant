@@ -7,11 +7,20 @@ import json
 import os
 import re
 import shutil
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from stage01_numbered_layout import apply_layout
+from visual_review_pack import RgbImage
+
+try:
+    from PIL import Image as PILImage
+    from PIL import ImageDraw as PILImageDraw
+except Exception:  # pragma: no cover - pure Python fallback remains available.
+    PILImage = None
+    PILImageDraw = None
 
 
 RUN_RE = re.compile(r"^(a1_\d{3}_[a-z0-9_]+)__\d{8}_\d{6}(?:__r\d+)?$")
@@ -57,14 +66,6 @@ def write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def copy_image(src: Path, dst: Path) -> bool:
-    if not src.exists():
-        return False
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
-    return True
-
-
 def discover_runs(out_dir: Path) -> list[dict[str, Any]]:
     runs_root = out_dir / "runs"
     runs: list[dict[str, Any]] = []
@@ -96,6 +97,7 @@ def status_for_run(run: dict[str, Any]) -> dict[str, Any]:
     rig = load_json(run_dir / "03_stage01_data" / f"{asset_name}_rig_detail_review.json")
     visual = load_json(run_dir / "03_stage01_data" / f"{asset_name}_visual_qc.json")
     body = load_json(run_dir / "03_stage01_data" / f"{asset_name}_body_profile.json")
+    slice_analysis = load_json(run_dir / "08_visual_review_evidence" / "slices" / "slice_analysis.json")
 
     refinement = fit.get("fitRefinement", {})
     if not isinstance(refinement, dict):
@@ -106,6 +108,19 @@ def status_for_run(run: dict[str, Any]) -> dict[str, Any]:
     visual_issues = visual.get("issues", [])
     if not isinstance(visual_issues, list):
         visual_issues = []
+    ct_failures = int(slice_analysis.get("strictWrapFailureCount", 0) or 0)
+    ct_failure_items = slice_analysis.get("strictWrapFailures", [])
+    if not isinstance(ct_failure_items, list):
+        ct_failure_items = []
+    ct_segments = Counter(
+        str(item.get("segment", "unknown"))
+        for item in ct_failure_items
+        if isinstance(item, dict)
+    )
+    ct_worst_segment = ""
+    if ct_segments:
+        segment, count = ct_segments.most_common(1)[0]
+        ct_worst_segment = f"{segment} x{count}"
 
     return {
         "assetName": asset_name,
@@ -116,6 +131,8 @@ def status_for_run(run: dict[str, Any]) -> dict[str, Any]:
         "fitIterations": refinement.get("iterations"),
         "initialFailures": refinement.get("initialFailures"),
         "finalFailures": refinement.get("finalFailures"),
+        "ctSliceFailureCount": ct_failures,
+        "ctWorstSegment": ct_worst_segment,
         "finalMaxDistance": refinement.get("finalMaxDistance") or fit.get("maxGuideNodeDistance"),
         "averageGuideNodeDistance": fit.get("averageGuideNodeDistance"),
         "stage01MechanicalHandoffReady": gate.get("stage01MechanicalHandoffReady"),
@@ -216,9 +233,19 @@ def image_groups() -> list[dict[str, str]]:
         "spine_chest",
         "chest_neck",
         "neck_head",
+        "chest_l_clavicle",
+        "l_clavicle_l_shoulder",
+        "l_shoulder_l_elbow",
+        "l_elbow_l_wrist",
+        "chest_r_clavicle",
+        "r_clavicle_r_shoulder",
+        "r_shoulder_r_elbow",
+        "r_elbow_r_wrist",
+        "pelvis_l_hip",
         "l_hip_l_knee",
         "l_knee_l_ankle",
         "l_ankle_l_toe",
+        "pelvis_r_hip",
         "r_hip_r_knee",
         "r_knee_r_ankle",
         "r_ankle_r_toe",
@@ -230,7 +257,7 @@ def image_groups() -> list[dict[str, str]]:
                 "slug": f"slice_{slug}",
                 "title": f"Slice {slug}",
                 "source": f"08_visual_review_evidence/slices/{{asset}}_slice_{slug}.png",
-                "why": "MR 式骨段截面，观察骨段中心和显示粗细是否落在局部体积内部。",
+                "why": "CT 式逐关节截面，观察骨段中心是否被局部点云截面严格包裹。",
             }
         )
     return groups
@@ -258,6 +285,114 @@ def card_html(item: dict[str, Any], pack_dir: Path, image_rel: str) -> str:
     )
 
 
+def status_border_color(status: dict[str, Any]) -> tuple[int, int, int]:
+    if status.get("stage01MechanicalHandoffReady") is False or status.get("finalFailures") not in (0, None, ""):
+        return (204, 64, 64)
+    if status.get("semanticSkinBlockerCount", 0):
+        return (220, 165, 40)
+    return (42, 139, 78)
+
+
+def fit_size(width: int, height: int, max_width: int, max_height: int) -> tuple[int, int]:
+    if width <= 0 or height <= 0:
+        return (max_width, max_height)
+    scale = min(max_width / width, max_height / height)
+    return (max(1, int(width * scale)), max(1, int(height * scale)))
+
+
+def draw_border(image: RgbImage, left: int, top: int, width: int, height: int, color: tuple[int, int, int]) -> None:
+    image.rect(left, top, left + width - 1, top + height - 1, color, 3, 1.0)
+
+
+def build_contact_sheet(group_dir: Path, group: dict[str, str], copied: list[dict[str, Any]]) -> dict[str, Any]:
+    if not copied:
+        return {"path": "", "positions": []}
+
+    is_slice = group["phase"] == "07_cross_section_slices"
+    tile_w = 680 if is_slice else 380
+    tile_h = 170 if is_slice else 285
+    cols = 2 if is_slice else 4
+    gap = 16
+    margin = 18
+    rows = (len(copied) + cols - 1) // cols
+    sheet_w = margin * 2 + cols * tile_w + (cols - 1) * gap
+    sheet_h = margin * 2 + rows * tile_h + (rows - 1) * gap
+    positions: list[dict[str, Any]] = []
+    path = group_dir / "contact_sheet.png"
+
+    if PILImage is not None and PILImageDraw is not None:
+        sheet = PILImage.new("RGB", (sheet_w, sheet_h), (246, 246, 244))
+        draw = PILImageDraw.Draw(sheet)
+        resample = getattr(getattr(PILImage, "Resampling", PILImage), "LANCZOS", 1)
+        for index, item in enumerate(copied, start=1):
+            row = (index - 1) // cols
+            col = (index - 1) % cols
+            left = margin + col * (tile_w + gap)
+            top = margin + row * (tile_h + gap)
+            draw.rectangle(
+                [left, top, left + tile_w - 1, top + tile_h - 1],
+                outline=status_border_color(item["status"]),
+                width=3,
+            )
+            ok = False
+            try:
+                with PILImage.open(item["sourcePath"]) as src:
+                    thumb = src.convert("RGB")
+                    thumb.thumbnail((tile_w - 8, tile_h - 8), resample=resample)
+                    sheet.paste(thumb, (left + (tile_w - thumb.width) // 2, top + (tile_h - thumb.height) // 2))
+                ok = True
+            except Exception as exc:  # pragma: no cover - report generation should keep going.
+                item["error"] = str(exc)
+            positions.append(
+                {
+                    "index": index,
+                    "row": row + 1,
+                    "column": col + 1,
+                    "assetName": item["assetName"],
+                    "ok": ok,
+                    "status": item["status"],
+                    "source": item["source"],
+                    "runReadme": item["runReadme"],
+                }
+            )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        sheet.save(path)
+        return {"path": path, "positions": positions, "columns": cols, "tileWidth": tile_w, "tileHeight": tile_h}
+
+    sheet = RgbImage.new(sheet_w, sheet_h, (246, 246, 244))
+
+    for index, item in enumerate(copied, start=1):
+        row = (index - 1) // cols
+        col = (index - 1) % cols
+        left = margin + col * (tile_w + gap)
+        top = margin + row * (tile_h + gap)
+        draw_border(sheet, left, top, tile_w, tile_h, status_border_color(item["status"]))
+        try:
+            src_image = RgbImage.from_png(Path(item["sourcePath"]))
+            thumb_w, thumb_h = fit_size(src_image.width, src_image.height, tile_w - 8, tile_h - 8)
+            thumb = src_image.resized_nearest(thumb_w, thumb_h)
+            sheet.paste(thumb, left + (tile_w - thumb_w) // 2, top + (tile_h - thumb_h) // 2)
+            ok = True
+        except Exception as exc:  # pragma: no cover - report generation should keep going.
+            ok = False
+            item["error"] = str(exc)
+        positions.append(
+            {
+                "index": index,
+                "row": row + 1,
+                "column": col + 1,
+                "assetName": item["assetName"],
+                "ok": ok,
+                "status": item["status"],
+                "source": item["source"],
+                "runReadme": item["runReadme"],
+            }
+        )
+
+    sheet.save_png(path)
+    return {"path": path, "positions": positions, "columns": cols, "tileWidth": tile_w, "tileHeight": tile_h}
+
+
 def html_page(title: str, body: str, depth: int = 0) -> str:
     prefix = "../" * depth
     return f"""<!doctype html>
@@ -279,6 +414,7 @@ def html_page(title: str, body: str, depth: int = 0) -> str:
     .card.warn {{ background:var(--warn); }}
     .card.danger {{ background:var(--danger); }}
     .card img {{ width:100%; max-height:360px; object-fit:contain; display:block; background:#111; border-radius:6px; }}
+    .contact {{ width:100%; max-height:none; display:block; background:#111; border:1px solid var(--line); }}
     .card h3 {{ font-size:14px; margin:8px 0 4px; }}
     .card p {{ margin:4px 0; color:var(--muted); }}
     table {{ border-collapse:collapse; width:100%; background:var(--card); }}
@@ -308,15 +444,12 @@ def write_group(pack_dir: Path, group: dict[str, str], runs: list[dict[str, Any]
     for index, run in enumerate(runs, start=1):
         asset = run["assetName"]
         src = run["runDir"] / group["source"].format(asset=asset)
-        ext = src.suffix if src.suffix else ".png"
-        dst_name = f"{index:02d}_{asset}{ext}"
-        dst = group_dir / dst_name
-        if copy_image(src, dst):
+        if src.exists():
             copied.append(
                 {
                     "assetName": asset,
                     "source": rel(src, pack_dir),
-                    "image": rel(dst, group_dir),
+                    "sourcePath": str(src),
                     "runReadme": rel(run["runDir"] / "README.md", group_dir),
                     "status": statuses.get(asset, {}),
                 }
@@ -324,14 +457,26 @@ def write_group(pack_dir: Path, group: dict[str, str], runs: list[dict[str, Any]
         else:
             missing.append(asset)
 
-    cards = "\n".join(card_html(item, pack_dir, item["image"]) for item in copied)
+    contact = build_contact_sheet(group_dir, group, copied)
+    contact_rel = rel(contact["path"], group_dir) if contact.get("path") else ""
+    rows = "\n".join(
+        "<tr><td>{}</td><td>{}</td><td>{}</td><td><code>{}</code></td><td><a href=\"{}\">run README</a></td></tr>".format(
+            item["index"],
+            item["row"],
+            item["column"],
+            html.escape(item["assetName"]),
+            html.escape(item["runReadme"]),
+        )
+        for item in contact.get("positions", [])
+    )
     body = "\n".join(
         [
             f"<p>{html.escape(group['why'])}</p>",
             f"<p class=\"muted\">模型数：{len(copied)}，缺失：{len(missing)}</p>",
-            "<div class=\"grid\">",
-            cards,
-            "</div>",
+            f'<p><a href="{html.escape(contact_rel)}"><img class="contact" src="{html.escape(contact_rel)}" alt="{html.escape(group["title"])} contact sheet"></a></p>' if contact_rel else "",
+            "<table><thead><tr><th>#</th><th>Row</th><th>Col</th><th>Asset</th><th>Run</th></tr></thead><tbody>",
+            rows,
+            "</tbody></table>",
         ]
     )
     write_text(group_dir / "index.html", html_page(group["title"], body, depth=2))
@@ -343,21 +488,25 @@ def write_group(pack_dir: Path, group: dict[str, str], runs: list[dict[str, Any]
         "",
         f"- Collected: `{len(copied)}`",
         f"- Missing: `{len(missing)}`",
+        f"- Contact sheet: `{contact_rel}`",
+        f"- Sheet grid: `{contact.get('columns', '')}` columns, tile `{contact.get('tileWidth', '')}x{contact.get('tileHeight', '')}`",
         "",
-        "| # | Asset | Image | Run | Flags |",
-        "| --- | --- | --- | --- | --- |",
+        "| # | Row | Col | Asset | Run | Flags |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
-    for i, item in enumerate(copied, start=1):
+    for item in contact.get("positions", []):
         status = item["status"]
         flags = []
         if status.get("stage01MechanicalHandoffReady") is False:
             flags.append("mechanical_blocked")
+        if status.get("ctSliceFailureCount"):
+            flags.append(f"ctFailures={status.get('ctSliceFailureCount')}")
         if status.get("finalFailures") not in (0, None, ""):
             flags.append(f"finalFailures={status.get('finalFailures')}")
         if status.get("semanticSkinBlockerCount"):
             flags.append(f"semanticBlockers={status.get('semanticSkinBlockerCount')}")
         md_lines.append(
-            f"| {i} | `{item['assetName']}` | `{item['image']}` | `{item['runReadme']}` | `{', '.join(flags)}` |"
+            f"| {item['index']} | `{item['row']}` | `{item['column']}` | `{item['assetName']}` | `{item['runReadme']}` | `{', '.join(flags)}` |"
         )
     if missing:
         md_lines += ["", "## Missing", ""]
@@ -373,6 +522,7 @@ def write_group(pack_dir: Path, group: dict[str, str], runs: list[dict[str, Any]
         "directory": rel(group_dir, pack_dir),
         "html": rel(group_dir / "index.html", pack_dir),
         "markdown": rel(group_dir / "index.md", pack_dir),
+        "contactSheet": rel(contact["path"], pack_dir) if contact.get("path") else "",
         "collected": len(copied),
         "missing": missing,
     }
@@ -388,6 +538,8 @@ def write_status_tables(pack_dir: Path, statuses: list[dict[str, Any]]) -> None:
         "fitIterations",
         "initialFailures",
         "finalFailures",
+        "ctSliceFailureCount",
+        "ctWorstSegment",
         "finalMaxDistance",
         "averageGuideNodeDistance",
         "stage01MechanicalHandoffReady",
@@ -410,14 +562,16 @@ def write_status_tables(pack_dir: Path, statuses: list[dict[str, Any]]) -> None:
     md_lines = [
         "# A1 Stage01 Status Table",
         "",
-        "| Asset | Mechanical | Final failures | Max dist | Stage01 handoff | Skin setup | Semantic blockers |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| Asset | Mechanical | CT failures | Worst CT segment | Internal failures | Max dist | Stage01 handoff | Skin setup | Semantic blockers |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in statuses:
         md_lines.append(
-            "| `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` |".format(
+            "| `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` | `{}` |".format(
                 row.get("assetName"),
                 row.get("stage01MechanicalHandoffReady"),
+                row.get("ctSliceFailureCount"),
+                row.get("ctWorstSegment"),
                 row.get("finalFailures"),
                 row.get("finalMaxDistance"),
                 row.get("stage01HandoffReady"),
@@ -434,6 +588,8 @@ def write_status_tables(pack_dir: Path, statuses: list[dict[str, Any]]) -> None:
                 for key in [
                     "assetName",
                     "stage01MechanicalHandoffReady",
+                    "ctSliceFailureCount",
+                    "ctWorstSegment",
                     "finalFailures",
                     "finalMaxDistance",
                     "stage01HandoffReady",
@@ -449,7 +605,7 @@ def write_status_tables(pack_dir: Path, statuses: list[dict[str, Any]]) -> None:
 <p>这张表用于先定位机械失败和高风险 blocker。详细视觉检查请回到总览按图组打开。</p>
 <p><a href="status.csv">下载 CSV</a></p>
 <table>
-<thead><tr><th>Asset</th><th>Mechanical</th><th>Final failures</th><th>Max dist</th><th>Stage01 handoff</th><th>Skin setup</th><th>Blockers</th><th>Blocker codes</th></tr></thead>
+<thead><tr><th>Asset</th><th>Mechanical</th><th>CT failures</th><th>Worst CT segment</th><th>Internal failures</th><th>Max dist</th><th>Stage01 handoff</th><th>Skin setup</th><th>Blockers</th><th>Blocker codes</th></tr></thead>
 <tbody>
 {html_rows}
 </tbody>
@@ -461,6 +617,7 @@ def write_status_tables(pack_dir: Path, statuses: list[dict[str, Any]]) -> None:
 def write_root_docs(pack_dir: Path, runs: list[dict[str, Any]], statuses: list[dict[str, Any]], group_results: list[dict[str, Any]]) -> None:
     mechanical_blocked = [row for row in statuses if row.get("stage01MechanicalHandoffReady") is False]
     nonzero_failures = [row for row in statuses if row.get("finalFailures") not in (0, None, "")]
+    ct_blocked = [row for row in statuses if int(row.get("ctSliceFailureCount") or 0) > 0]
     total_images = sum(group["collected"] for group in group_results)
     missing_count = sum(len(group["missing"]) for group in group_results)
 
@@ -493,7 +650,7 @@ def write_root_docs(pack_dir: Path, runs: list[dict[str, Any]], statuses: list[d
             "</ol>",
             "<h2>本包状态</h2>",
             f"<p>模型数：{len(runs)}；已复制图：{total_images}；缺失图引用：{missing_count}。</p>",
-            f"<p>机械 handoff 未通过：{len(mechanical_blocked)}；final failures 非 0：{len(nonzero_failures)}。</p>",
+            f"<p>机械 handoff 未通过：{len(mechanical_blocked)}；CT strict failures 非 0：{len(ct_blocked)}；internal final failures 非 0：{len(nonzero_failures)}。</p>",
             "<h2>所有图组</h2>",
             "\n".join(link_lines),
         ]
@@ -513,6 +670,7 @@ def write_root_docs(pack_dir: Path, runs: list[dict[str, Any]], statuses: list[d
         "- `03_wire_bone_technical_views/wire_bone_side/index.html`：所有模型真实 Max 线框+候选 Biped 侧视。",
         "- `04_visual_review_full/visual_review_full_front/index.html`：所有模型投影证据全局前视。",
         "- `05_region_crops/`：头、骨盆、手、脚局部横向对比。",
+        "- 每个图组只保留 `contact_sheet.png` 一张大图；具体行列和资产名看同目录 `index.md`。",
         "",
         "## 怎样解读",
         "",
@@ -528,14 +686,15 @@ def write_root_docs(pack_dir: Path, runs: list[dict[str, Any]], statuses: list[d
         f"- 已复制图片数：`{total_images}`",
         f"- 缺失图引用数：`{missing_count}`",
         f"- 机械 handoff 未通过：`{len(mechanical_blocked)}`",
-        f"- final failures 非 0：`{len(nonzero_failures)}`",
+        f"- CT strict failures 非 0：`{len(ct_blocked)}`",
+        f"- internal final failures 非 0：`{len(nonzero_failures)}`",
         "",
     ]
     if mechanical_blocked:
         readme_lines += ["### 机械 handoff 未通过", ""]
         for row in mechanical_blocked:
             readme_lines.append(
-                f"- `{row['assetName']}` finalFailures=`{row.get('finalFailures')}`, maxDist=`{row.get('finalMaxDistance')}`"
+                f"- `{row['assetName']}` ctFailures=`{row.get('ctSliceFailureCount')}`, worstCt=`{row.get('ctWorstSegment')}`, internalFinalFailures=`{row.get('finalFailures')}`, maxDist=`{row.get('finalMaxDistance')}`"
             )
         readme_lines.append("")
     readme_lines += ["## 图组索引", ""]

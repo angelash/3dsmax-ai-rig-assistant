@@ -150,6 +150,7 @@ def analyze(
     visual_qc: dict[str, Any],
     rig_detail: dict[str, Any],
     rig_asset_qc: dict[str, Any],
+    slice_analysis: dict[str, Any],
     visual_signoff: dict[str, Any],
     manual_semantic_confirmed: bool,
     skin_weights_complete: bool,
@@ -166,6 +167,9 @@ def analyze(
         and not biped_fit_qc.get("fitFailures")
         and not biped_fit_qc.get("outsideBoundsSamples")
     )
+    ct_wrap_available = bool(slice_analysis) and isinstance(slice_analysis.get("segments"), dict)
+    ct_wrap_failure_count = int(slice_analysis.get("strictWrapFailureCount", 0) or 0) if ct_wrap_available else 0
+    ct_wrap_ready = ct_wrap_available and ct_wrap_failure_count == 0
     visual_available = bool(visual_qc) and bool(visual_qc.get("screenshots") or visual_qc.get("visualMode"))
     detail_available = bool(rig_detail) and bool(rig_detail.get("semanticSkinReview") or rig_detail.get("boneReviews"))
     semantic_skin_review = rig_detail.get("semanticSkinReview", {})
@@ -183,7 +187,7 @@ def analyze(
         )
     ]
     semantic_policy_ready = not semantic_skin_blockers
-    semantic_skin_ready = semantic_policy_ready and multiview_signoff["ready"] and biped_fit_ready
+    semantic_skin_ready = semantic_policy_ready and multiview_signoff["ready"] and biped_fit_ready and ct_wrap_ready
     semantic_confirmed = manual_semantic_confirmed or multiview_signoff["ready"]
     has_skin = skeleton.get("hasSkin") is True
     skin_influence_ready = (
@@ -194,7 +198,7 @@ def analyze(
     )
 
     stage01_candidate_available = biped_output_available and visual_available and detail_available
-    stage01_mechanical_handoff_ready = biped_fit_ready
+    stage01_mechanical_handoff_ready = biped_fit_ready and ct_wrap_ready
     stage01_handoff_ready = (
         stage01_candidate_available
         and stage01_mechanical_handoff_ready
@@ -213,6 +217,18 @@ def analyze(
             blockers,
             "biped_fit_requires_correction",
             "Biped exists, but fit diagnostics still report missing samples, guide distance failures, or nodes outside the model bounds.",
+        )
+    if not ct_wrap_available:
+        add_blocker(
+            blockers,
+            "cross_section_wrap_missing",
+            "Strict CT-style joint/segment slice analysis is missing; Stage01 cannot prove that the Biped chain is wrapped by the point cloud.",
+        )
+    elif not ct_wrap_ready:
+        add_blocker(
+            blockers,
+            "cross_section_wrap_requires_correction",
+            f"Strict CT-style slice analysis reports {ct_wrap_failure_count} unwrapped joint/segment samples. Refit guides/Biped until every sampled section is wrapped.",
         )
     for risk in semantic_skin_blockers:
         add_blocker(
@@ -322,6 +338,11 @@ def analyze(
             "check": "Confirm clavicle, shoulder, elbow, wrist and hand-mass guides use the local limb centerline, not the silhouette edge.",
         },
         {
+            "id": "confirm_ct_slice_wrapping",
+            "status": "done" if ct_wrap_ready else "required",
+            "check": "Confirm every joint/segment CT-style slice is green/strictly wrapped; red slices must be corrected before handoff.",
+        },
+        {
             "id": "confirm_deferred_details",
             "status": "done" if semantic_confirmed else "required",
             "check": "Confirm whether beak, cloth, weapon, wing, claw or finger details require Biped structure/options before Skin; do not add ordinary Bones to the body flow.",
@@ -338,6 +359,11 @@ def analyze(
             "id": "correct_biped_fit",
             "status": status(biped_fit_ready),
             "note": "Continue visual/Figure Mode calibration until Biped fit QC has no missing samples, distance failures, or outside-bounds nodes.",
+        },
+        {
+            "id": "correct_ct_slice_wrap",
+            "status": status(ct_wrap_ready),
+            "note": "Continue guide/Biped correction until strict CT-style slice analysis has zero unwrapped samples.",
         },
         {
             "id": "manual_landmark_signoff",
@@ -409,6 +435,13 @@ def analyze(
                 "sourceProductionReady": visual_qc.get("productionReady"),
                 "decisionUse": "diagnostic_only",
             },
+            "ctSliceWrap": {
+                "ready": ct_wrap_ready,
+                "available": ct_wrap_available,
+                "strictWrapFailureCount": ct_wrap_failure_count,
+                "failureExamples": slice_analysis.get("strictWrapFailures", [])[:12] if ct_wrap_available else [],
+                "decisionUse": "decision_gate",
+            },
             "rigDetail": {
                 "ready": detail_available,
                 "score": "hidden_diagnostic_only",
@@ -437,7 +470,9 @@ def analyze(
         "prepWarnings": prep_warnings,
         "decision": (
             "Biped candidate exists, but Biped fit diagnostics must be corrected before Skin setup."
-            if stage01_candidate_available and not stage01_mechanical_handoff_ready
+            if stage01_candidate_available and not biped_fit_ready
+            else "Biped candidate exists, but CT-style slice wrapping reports unwrapped joints/segments that must be corrected."
+            if stage01_candidate_available and biped_fit_ready and not ct_wrap_ready
             else "Visual candidate exists, but front/side/top wrapping has not been approved by human/VLM review."
             if stage01_candidate_available and not multiview_signoff["ready"]
             else "Visual candidate exists, but semantic Skin blockers must be resolved before Skin setup."
@@ -495,6 +530,9 @@ def write_markdown(qc: dict[str, Any], inputs: dict[str, str], md_path: Path) ->
     lines.append(
         f"| Visual screenshots / QC output | `{readiness['visual']['ready']}` | `score_hidden` | `{readiness['visual']['decisionUse']}` |"
     )
+    ct_wrap = readiness["ctSliceWrap"]
+    ct_wrap_state = f"available={ct_wrap['available']}, strictWrapFailures={ct_wrap['strictWrapFailureCount']}"
+    lines.append(f"| CT-style slice wrap | `{ct_wrap['ready']}` | `{ct_wrap_state}` | `{ct_wrap['decisionUse']}` |")
     lines.append(
         f"| Rig detail diagnostic output | `{readiness['rigDetail']['ready']}` | `score_hidden` | `{readiness['rigDetail']['decisionUse']}` |"
     )
@@ -568,6 +606,7 @@ def main() -> int:
     parser.add_argument("--visual-qc-json", default="")
     parser.add_argument("--rig-detail-review-json", default="")
     parser.add_argument("--rig-asset-qc-json", default="")
+    parser.add_argument("--slice-analysis-json", default="")
     parser.add_argument("--visual-signoff-json", default="")
     parser.add_argument("--out-dir", default="")
     parser.add_argument("--md-out-dir", default="")
@@ -581,6 +620,7 @@ def main() -> int:
     visual_qc = load_json(args.visual_qc_json)
     rig_detail = load_json(args.rig_detail_review_json)
     rig_asset_qc = load_json(args.rig_asset_qc_json)
+    slice_analysis = load_json(args.slice_analysis_json)
     visual_signoff = load_json(args.visual_signoff_json)
 
     asset_name = (
@@ -603,6 +643,7 @@ def main() -> int:
         visual_qc=visual_qc,
         rig_detail=rig_detail,
         rig_asset_qc=rig_asset_qc,
+        slice_analysis=slice_analysis,
         visual_signoff=visual_signoff,
         manual_semantic_confirmed=args.manual_semantic_confirmed,
         skin_weights_complete=args.skin_weights_complete,
@@ -613,6 +654,7 @@ def main() -> int:
         "visualQcJson": args.visual_qc_json,
         "rigDetailReviewJson": args.rig_detail_review_json,
         "rigAssetQcJson": args.rig_asset_qc_json,
+        "sliceAnalysisJson": args.slice_analysis_json,
         "visualSignoffJson": args.visual_signoff_json,
     }
     qc["inputs"] = inputs

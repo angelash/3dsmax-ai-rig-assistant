@@ -6,6 +6,8 @@
 
 第一版不是全自动绑骨，而是“Guide 定位点 + Biped 自动创建/匹配 + 多视图证据包 + Skin gate”。这样更适合真实生产：AI 或脚本负责机械流程，人或 VLM 负责结构化视觉判断，最终 gate 负责拒绝不合格候选。
 
+当前实验研究期的默认启动规范是 `docs/stage01-self-learning-rigging-standard.md`，具体操作顺序以 `docs/skills/stage01-ct-guided-biped-rigging/SKILL.md` 为准：Agent 按教程从 Root/骨盆开始逐段控制、逐段 CT 校验并锁定；脚本只作为测量、切片、局部移动和报告工具，不能用固定迭代次数代替成功判断。每轮既要产出可复查候选，也要记录工具缺口、正负收益和下一步改进项。
+
 ## 已实现能力
 
 脚本位置：
@@ -16,14 +18,14 @@
 
 | 功能 | 说明 |
 | --- | --- |
-| Create / Update Guides | 根据选中模型包围盒生成 Stage01 关节定位点 |
+| Create / Update Guides | 根据选中模型包围盒生成 Stage01 初始关节定位点，只作为创建基础 Biped 的候选输入 |
 | Mirror L Guides To R | 把左侧定位点沿 X 轴镜像到右侧 |
 | Create Biped From Guides | 用鲁班风格预设创建 Biped，并尝试匹配主要骨骼 |
 | Fit Existing Biped To Guides | 将当前场景已有 Biped 重新贴合定位点 |
 | Validate / Report | 检查缺失 Guide、左右对称问题，并生成 Markdown 报告 |
 | Save Stage01 File | 另存一个 `_stage01_biped.max` 工作文件 |
 
-离线批处理还会执行 Biped fit refinement loop：根据 Fit QC 偏差反复缩放 Biped 段长并重新定位，直到机械拟合收敛或达到上限。这个循环只解决 Biped 对 Guide 的机械一致性，不能替代 front/side/top 包裹性签核。对宽袍、裙摆、披风或靴筒遮挡腿的角色，Guide 生成会降权衣服外轮廓，用更保守的隐藏腿模板放 Hip/Knee/Ankle；视觉签核也必须确认腿链没有追衣服边。
+离线批处理会在基础 Biped 创建后执行 CT-style volume refinement：Guide 不再作为后续收敛目标，只提供初始骨架；修正阶段逐骨段取 0/25/50/75/100% 关节切片，判断骨心是否被局部点云截面包裹，并只对未包裹切片做保守移动。Python 侧 `visual_review_pack.py` 会生成更严格的 CT 切片图和 `slice_analysis.json`，`stage01_skin_prep_gate.py` 把任何红色/未包裹切片作为硬 blocker。对宽袍、裙摆、披风或靴筒遮挡腿的角色，Guide 生成会降权衣服外轮廓，用更保守的隐藏腿模板放 Hip/Knee/Ankle；视觉签核也必须确认腿链没有追衣服边。
 
 ## 使用流程
 
@@ -36,10 +38,10 @@
    ```
 
 4. 点击 `Create / Update Guides`。
-5. 手动拖动 `AIRA_GUIDE_*` 定位点到模型关节位置。
+5. 手动拖动 `AIRA_GUIDE_*` 定位点到模型关节位置。Guide 只负责初始 Biped，不作为最终正确性的证明。
 6. 如果只调了左侧，点击 `Mirror L Guides To R`。
 7. 点击 `Create Biped From Guides`。
-8. 在 Figure Mode 中人工检查骨盆、腿、脚、躯干、手臂、脖子、头。
+8. 在 Figure Mode 中人工检查骨盆、腿、脚、躯干、手臂、脖子、头，并优先查看 `08_visual_review_evidence/slices/` 的 CT 切片。
 9. 点击 `Validate / Report` 生成检查报告。
 10. 点击 `Save Stage01 File` 保存阶段文件。
 
@@ -94,7 +96,7 @@ AIRA_GUIDE_L_Toe
 - 手指只创建 Biped 结构，暂不逐指自动匹配。
 - 不自动创建耳机、背包、枪、炮等附属 Bones；那是第二篇范围。
 - Stage01 不自动添加 Skin，也不处理权重；批处理会生成 `*_stage01_skin_prep_gate.md`，说明进入 Skin 前还需要哪些人工/VLM 语义确认和权重准备。第三、四篇范围已独立为 `docs/stage02-skin-workflow.md` 和 `server/batch_stage02_skin.ps1`，不会回改 Stage01 绑骨逻辑。
-- Biped 节点贴合依赖 3ds Max 的 Biped IK 和 Figure Mode，有些节点可能需要人工微调。
+- Biped 节点贴合依赖 3ds Max 的 Biped IK 和 Figure Mode，有些节点可能需要人工微调；CT 修正是保守自动收敛，不会把未包裹切片伪装成通过。
 - 离线 MCP/批处理入口已接入，但 Max 内部桥接仍只允许白名单工具函数，不接受任意 MaxScript。
 
 ## 适合接 MCP 的安全工具函数

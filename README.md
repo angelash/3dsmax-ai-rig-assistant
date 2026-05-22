@@ -46,8 +46,10 @@ MCP 入口只暴露白名单工具，不让 AI 任意执行 MaxScript。
 | `server/rig_detail_review.py` | 按教程顺序逐骨检查位置、长度、方向、粗细和镜像 |
 | `server/stage01_skin_prep_gate.py` | 汇总 Stage01 QC，生成进入 Skin 前的人工/VLM 语义确认和权重准备门 |
 | `server/organize_out_dir.py` | 整理 `out/`，把同一批次的场景、报告、数据、日志和截图归入 `runs/<assetName>__YYYYMMDD_HHMMSS/scene|reports|data|logs|screenshots|views/` 并生成说明文档 |
+| `server/stage01_ct_ordered_refine_probe.py` | 研究期局部 CT 修复 probe，按教程顺序测试逐段修复的正负收益 |
 | `presets/luban_stage01_biped.json` | 鲁班七号这类卡通矮角色的 Biped 结构预设 |
 | `presets/guide_algorithms.json` | Guide 候选生成器登记表，当前只启用 `tutorial_centerline_qbird` |
+| `docs/stage01-self-learning-rigging-standard.md` | Stage01 自学习自成长绑骨默认启动规范 |
 | `docs/stage01-workflow.md` | 使用流程、坐标约定、边界说明 |
 | `docs/stage02-skin-workflow.md` | 独立 Skin 设置、初始权重和生产边界说明 |
 | `docs/bone-fit-qc-method.md` | 骨骼适配自检指标和改进路线 |
@@ -91,6 +93,8 @@ F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_qc_fbx.ps1 -SourceFbx "
 当前检测项包括：几何数量、三角面数、顶点数、材质/贴图路径、包围盒尺寸、是否居中、缩放、骨骼节点、Skin Modifier、骨骼影响数、无权重点和问题列表。
 
 ## 骨骼适配自检
+
+Stage01 绑骨默认启用自学习自成长规范：详见 `docs/stage01-self-learning-rigging-standard.md` 和 `docs/skills/stage01-ct-guided-biped-rigging/SKILL.md`。也就是说，每次启动绑骨工作都要同时交付资产产物和学习产物：候选场景、CT 切片、wire/bone 图、状态表、报告，以及失败样本、正负收益、工具缺口和下一步改进项。脚本负责测量/切片/局部移动，Agent 负责按教程顺序逐段判断、锁定和提问。
 
 离线生成 Stage01 骨架和自检报告：
 

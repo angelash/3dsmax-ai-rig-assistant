@@ -91,13 +91,25 @@ SLICE_SEGMENTS = [
     ("Spine", "Chest"),
     ("Chest", "Neck"),
     ("Neck", "Head"),
+    ("Chest", "L_Clavicle"),
+    ("L_Clavicle", "L_Shoulder"),
+    ("L_Shoulder", "L_Elbow"),
+    ("L_Elbow", "L_Wrist"),
+    ("Chest", "R_Clavicle"),
+    ("R_Clavicle", "R_Shoulder"),
+    ("R_Shoulder", "R_Elbow"),
+    ("R_Elbow", "R_Wrist"),
+    ("Pelvis", "L_Hip"),
     ("L_Hip", "L_Knee"),
     ("L_Knee", "L_Ankle"),
     ("L_Ankle", "L_Toe"),
+    ("Pelvis", "R_Hip"),
     ("R_Hip", "R_Knee"),
     ("R_Knee", "R_Ankle"),
     ("R_Ankle", "R_Toe"),
 ]
+
+SLICE_SAMPLE_STATIONS = [0.0, 0.25, 0.50, 0.75, 1.0]
 
 
 class RgbImage:
@@ -655,6 +667,79 @@ def vec_norm(v: Point3) -> Point3:
     return [v[0] / length, v[1] / length, v[2] / length]
 
 
+def cross2(origin: tuple[float, float], a: tuple[float, float], b: tuple[float, float]) -> float:
+    return (a[0] - origin[0]) * (b[1] - origin[1]) - (a[1] - origin[1]) * (b[0] - origin[0])
+
+
+def convex_hull(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    unique = sorted(set((round(x, 6), round(y, 6)) for x, y in points))
+    if len(unique) <= 2:
+        return unique
+
+    lower: list[tuple[float, float]] = []
+    for point in unique:
+        while len(lower) >= 2 and cross2(lower[-2], lower[-1], point) <= 0:
+            lower.pop()
+        lower.append(point)
+
+    upper: list[tuple[float, float]] = []
+    for point in reversed(unique):
+        while len(upper) >= 2 and cross2(upper[-2], upper[-1], point) <= 0:
+            upper.pop()
+        upper.append(point)
+
+    return lower[:-1] + upper[:-1]
+
+
+def point_on_segment(point: tuple[float, float], a: tuple[float, float], b: tuple[float, float], eps: float = 1e-6) -> bool:
+    if abs(cross2(a, b, point)) > eps:
+        return False
+    return (
+        min(a[0], b[0]) - eps <= point[0] <= max(a[0], b[0]) + eps
+        and min(a[1], b[1]) - eps <= point[1] <= max(a[1], b[1]) + eps
+    )
+
+
+def point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
+    if len(polygon) < 3:
+        return False
+    inside = False
+    j = len(polygon) - 1
+    for i, current in enumerate(polygon):
+        previous = polygon[j]
+        if point_on_segment(point, previous, current):
+            return True
+        if (current[1] > point[1]) != (previous[1] > point[1]):
+            x_intersect = (previous[0] - current[0]) * (point[1] - current[1]) / (previous[1] - current[1]) + current[0]
+            if point[0] < x_intersect:
+                inside = not inside
+        j = i
+    return inside
+
+
+def radial_coverage(coords: list[tuple[float, float]], sector_count: int = 16) -> dict[str, Any]:
+    sectors: set[int] = set()
+    quadrants: set[int] = set()
+    radii: list[float] = []
+    for u, v in coords:
+        radius = math.hypot(u, v)
+        if radius <= 1e-5:
+            continue
+        angle = (math.atan2(v, u) + math.tau) % math.tau
+        sectors.add(int(angle / math.tau * sector_count) % sector_count)
+        quadrants.add((0 if u < 0 else 1) + (0 if v < 0 else 2))
+        radii.append(radius)
+
+    return {
+        "sectorCount": len(sectors),
+        "sectorTotal": sector_count,
+        "sectorCoverage": round(len(sectors) / sector_count, 6),
+        "quadrantCount": len(quadrants),
+        "minRadius": round(min(radii), 6) if radii else 0.0,
+        "maxRadius": round(max(radii), 6) if radii else 0.0,
+    }
+
+
 def bone_lookup(snapshot: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
     return {
         (bone.get("start", ""), bone.get("end", "")): bone
@@ -676,11 +761,32 @@ def draw_slice_panel(
     if coords:
         xs = [c[0] for c in coords]
         ys = [c[1] for c in coords]
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
+        raw_min_x, raw_max_x = min(xs), max(xs)
+        raw_min_y, raw_max_y = min(ys), max(ys)
     else:
-        min_x = min_y = -1.0
-        max_x = max_y = 1.0
+        raw_min_x = raw_min_y = -1.0
+        raw_max_x = raw_max_y = 1.0
+    hull = convex_hull(coords)
+    hull_contains_center = point_in_polygon((0.0, 0.0), hull)
+    radial = radial_coverage(coords)
+    axis_range_contains_center = bool(coords) and raw_min_x < 0 < raw_max_x and raw_min_y < 0 < raw_max_y
+    strictly_wrapped = (
+        len(coords) >= 12
+        and hull_contains_center
+        and radial["sectorCoverage"] >= 0.62
+        and radial["quadrantCount"] == 4
+    )
+    if len(coords) < 12:
+        wrap_state = "insufficient_slice_points"
+    elif not hull_contains_center:
+        wrap_state = "center_outside_cross_section_hull"
+    elif radial["quadrantCount"] < 4 or radial["sectorCoverage"] < 0.62:
+        wrap_state = "insufficient_radial_wrap"
+    else:
+        wrap_state = "strictly_wrapped"
+
+    min_x, max_x = raw_min_x, raw_max_x
+    min_y, max_y = raw_min_y, raw_max_y
     pad = max(max_x - min_x, max_y - min_y, bone_width, bone_height, 1.0) * 0.22
     min_x -= pad
     max_x += pad
@@ -694,13 +800,22 @@ def draw_slice_panel(
         py = int(top + (1.0 - (v - min_y) / span_y) * (height - 1))
         return px, py
 
-    image.rect(left, top, left + width - 1, top + height - 1, (212, 212, 212), 1, 1.0)
+    state_color = (42, 139, 78) if strictly_wrapped else (204, 64, 64)
+    image.rect(left, top, left + width - 1, top + height - 1, state_color, 2, 1.0)
     ox, oy = to_panel(0.0, 0.0)
     image.line(left, oy, left + width - 1, oy, (220, 220, 220), 1, 1.0)
     image.line(ox, top, ox, top + height - 1, (220, 220, 220), 1, 1.0)
     for u, v in coords:
         px, py = to_panel(u, v)
         image.point(px, py, (150, 150, 150), 1, 0.85)
+
+    if len(hull) >= 3:
+        previous = hull[-1]
+        for current in hull:
+            px0, py0 = to_panel(previous[0], previous[1])
+            px1, py1 = to_panel(current[0], current[1])
+            image.line(px0, py0, px1, py1, state_color, 2, 0.82)
+            previous = current
 
     radius_u = max(bone_width * 0.5, 0.1)
     radius_v = max(bone_height * 0.5, 0.1)
@@ -712,9 +827,11 @@ def draw_slice_panel(
             image.line(previous[0], previous[1], px, py, (245, 156, 28), 2, 0.95)
         previous = (px, py)
     image.point(ox, oy, (245, 156, 28), 5, 1.0)
+    if not strictly_wrapped:
+        image.line(ox - 12, oy - 12, ox + 12, oy + 12, (204, 64, 64), 2, 1.0)
+        image.line(ox - 12, oy + 12, ox + 12, oy - 12, (204, 64, 64), 2, 1.0)
 
-    inside = bool(coords) and min_x < 0 < max_x and min_y < 0 < max_y
-    local_span = max(max_x - min_x - 2 * pad, max_y - min_y - 2 * pad, 1.0)
+    local_span = max(raw_max_x - raw_min_x, raw_max_y - raw_min_y, 1.0)
     thickness_ratio = max(bone_width, bone_height) / local_span
     if thickness_ratio < 0.22:
         thickness_state = "thin_for_visual_body_volume"
@@ -724,7 +841,11 @@ def draw_slice_panel(
         thickness_state = "reasonable_visual_display_volume"
     return {
         "pointCount": len(coords),
-        "insideBodySection": inside,
+        "insideBodySection": strictly_wrapped,
+        "wrapState": wrap_state,
+        "axisRangeContainsCenter": axis_range_contains_center,
+        "hullContainsCenter": hull_contains_center,
+        "radialCoverage": radial,
         "localSpan": round(local_span, 6),
         "boneDisplayDiameter": round(max(bone_width, bone_height), 6),
         "thicknessRatio": round(thickness_ratio, 6),
@@ -738,7 +859,19 @@ def write_slice_analysis(run_dir: Path, asset_name: str, snapshot: dict[str, Any
     bounds = snapshot["bounds"]
     height = max(bounds["size"][2], 1.0)
     images: dict[str, str] = {}
-    analysis: dict[str, Any] = {"mode": "mr_style_cross_section_review", "segments": {}}
+    analysis: dict[str, Any] = {
+        "mode": "joint_chain_cross_section_wrap_review",
+        "policy": {
+            "segments": "all exported Biped body-chain segments",
+            "sampleStations": SLICE_SAMPLE_STATIONS,
+            "centerInsideRule": "bone center must be inside the local cross-section convex hull with four-quadrant radial point coverage",
+            "slabThicknessRule": "max(characterHeight*0.018, segmentLength*0.10, 1.0)",
+            "decisionUse": "hard blocker for Stage01 correction; not a skin-envelope proof",
+        },
+        "segments": {},
+        "strictWrapFailureCount": 0,
+        "strictWrapFailures": [],
+    }
 
     for start_name, end_name in SLICE_SEGMENTS:
         bone = bones.get((start_name, end_name))
@@ -758,14 +891,17 @@ def write_slice_analysis(run_dir: Path, asset_name: str, snapshot: dict[str, Any
             ref = [1.0, 0.0, 0.0]
         u_axis = vec_norm(vec_cross(axis, ref))
         v_axis = vec_norm(vec_cross(axis, u_axis))
-        slab = max(height * 0.012, length * 0.08, 0.8)
-        image = RgbImage.new(1140, 390, (248, 248, 246))
+        slab = max(height * 0.018, length * 0.10, 1.0)
+        panel_width = 270
+        panel_height = 310
+        gap = 10
+        image = RgbImage.new(40 + len(SLICE_SAMPLE_STATIONS) * panel_width + (len(SLICE_SAMPLE_STATIONS) - 1) * gap, 350, (248, 248, 246))
         segment_result: dict[str, Any] = {
             "segment": f"{start_name}->{end_name}",
             "slabThickness": round(slab, 6),
             "samples": [],
         }
-        for index, t in enumerate([0.25, 0.50, 0.75]):
+        for index, t in enumerate(SLICE_SAMPLE_STATIONS):
             center = vec_add(start, vec_scale(axis_vec, t))
             coords: list[tuple[float, float]] = []
             for point in mesh_points:
@@ -774,16 +910,28 @@ def write_slice_analysis(run_dir: Path, asset_name: str, snapshot: dict[str, Any
                     coords.append((vec_dot(delta, u_axis), vec_dot(delta, v_axis)))
             panel_result = draw_slice_panel(
                 image,
-                20 + index * 375,
+                20 + index * (panel_width + gap),
                 20,
-                350,
-                350,
+                panel_width,
+                panel_height,
                 coords,
                 bone_width=float(bone.get("boneWidth") or 0.0),
                 bone_height=float(bone.get("boneHeight") or 0.0),
             )
             panel_result["t"] = t
+            panel_result["samplePosition"] = [round(value, 6) for value in center]
             segment_result["samples"].append(panel_result)
+            if not panel_result["insideBodySection"]:
+                analysis["strictWrapFailureCount"] += 1
+                analysis["strictWrapFailures"].append(
+                    {
+                        "segment": f"{start_name}->{end_name}",
+                        "t": t,
+                        "wrapState": panel_result["wrapState"],
+                        "pointCount": panel_result["pointCount"],
+                        "radialCoverage": panel_result["radialCoverage"],
+                    }
+                )
         slug = f"{start_name}_{end_name}".lower()
         path = output_dir / f"{asset_name}_slice_{slug}.png"
         image.save_png(path)
@@ -1044,7 +1192,7 @@ def write_method_assessment(path: Path, *, asset_name: str, images: dict[str, st
             status(["texture_wire_compare_front", "texture_wire_compare_side", "texture_wire_compare_top"]),
             "`, `".join([images.get(f"texture_wire_compare_{view}", "") for view in VIEWS if images.get(f"texture_wire_compare_{view}", "")]),
         ),
-        "| MR-style cross sections | `{}` | 沿高风险骨段 25/50/75% 切片，看骨骼中心和显示粗细是否落在局部体积内 | `{}` | 基于采样点云和显示骨粗，不等同于 Skin 包络或实际权重 |".format(
+        "| MR-style cross sections | `{}` | 沿完整 Biped 关节链做 0/25/50/75/100% 切片，看骨骼中心是否被局部点云截面包裹 | `{}` | 基于采样点云和显示骨粗，不等同于 Skin 包络或实际权重 |".format(
             "available" if any(key.startswith("slice_") for key in images) else "missing",
             "`, `".join([value for key, value in sorted(images.items()) if key.startswith("slice_")][:8]),
         ),
@@ -1124,7 +1272,7 @@ def write_landmark_reasoning(
         "",
         "## MR 式切片",
         "",
-        "切片图在每根高风险骨段的 25%、50%、75% 位置截取局部点云。灰点是模型截面采样，橙色圆/点是骨骼显示粗细和中心。它回答两个问题：骨骼中心是否在肢体内部，骨骼显示粗细是否与局部体积相称。",
+        "切片图在完整 Biped 关节链每个骨段的 0%、25%、50%、75%、100% 位置截取局部点云。灰点是模型截面采样，绿框表示骨中心被截面凸包和周向点云包裹，红框/红叉表示中心没有被严格包裹。它回答两个问题：骨骼中心是否在肢体内部，骨骼显示粗细是否与局部体积相称。",
         "",
     ]
     slice_keys = sorted(key for key in images if key.startswith("slice_"))
@@ -1136,12 +1284,15 @@ def write_landmark_reasoning(
 
     lines += ["", "## 切片诊断摘要", ""]
     segments = slice_analysis.get("segments", {}) if isinstance(slice_analysis, dict) else {}
+    strict_failures = int(slice_analysis.get("strictWrapFailureCount", 0) or 0) if isinstance(slice_analysis, dict) else 0
+    lines.append(f"- Strict wrap failures: `{strict_failures}`")
     if segments:
         for key, item in sorted(segments.items()):
             samples = item.get("samples", [])
             inside_count = sum(1 for sample in samples if sample.get("insideBodySection"))
+            wrap_states = sorted({sample.get("wrapState", "unknown") for sample in samples})
             states = sorted({sample.get("thicknessState", "unknown") for sample in samples})
-            lines.append(f"- `{key}`: inside sections `{inside_count}/{len(samples)}`, thickness `{', '.join(states)}`")
+            lines.append(f"- `{key}`: strict wrapped sections `{inside_count}/{len(samples)}`, wrap `{', '.join(wrap_states)}`, thickness `{', '.join(states)}`")
     else:
         lines.append("- 无切片诊断数据。")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -1237,7 +1388,7 @@ def write_review_input(
         "- Top wrap: confirm shoulders, hands, pelvis, knees, feet and toe direction are inside the top-view footprint and follow the model depth.",
         "- Biped COM/Pelvis: confirm COM is at the visual waist and control-only, and Pelvis starts body deformation.",
         "- Texture trace: confirm the cyan belt/waist texture search evidence and the paired real wire/bone view support the Biped COM/Pelvis placement, or mark uncertain/blocker.",
-        "- Cross sections: confirm high-risk slices show bone centers inside the local body volume and display thickness is reasonable.",
+        "- Cross sections: confirm every exported Biped segment has strict wrap at the joint/end/mid slices; red-framed slices are correction blockers.",
         "- Leg clothing occlusion: if robe, skirt, cape or boot volume hides the real leg, confirm hip/knee/ankle are judged from under-clothing anatomy plus visible foot/boot pivots, not the clothing outline.",
         "- HeadTop/CrestTop: confirm HeadTop is skull/helmet volume and CrestTop is non-deforming crest/headwear reference.",
         "- Hands: confirm whether each hand mass needs Biped fingers or explicit Biped detail structure.",
@@ -1378,7 +1529,7 @@ def main() -> int:
         "- `full/`: full front, side and top context images.",
         "- `regions/`: cropped high-risk regions for head, pelvis, hands and feet.",
         "- `semantic_analysis/`: texture-only semantic evidence images, paired texture-vs-wire comparison images and machine-readable texture trace data.",
-        "- `slices/`: MR-style cross sections for high-risk bones.",
+        "- `slices/`: MR-style cross sections for every exported Biped body-chain segment.",
         "- `../wire_bone_screenshots/`: 3ds Max wireframe + bone technical views referenced by this pack when available.",
         "- `review_schema.json`: strict review output shape for human/VLM review.",
         "- `semantic_visual_review_template.json`: blank review result to fill.",

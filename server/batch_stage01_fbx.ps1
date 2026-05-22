@@ -13,7 +13,7 @@ param(
 
     [string]$VlmReviewModel = "",
 
-    [int]$MaxFitIterations = 12,
+    [int]$MaxFitIterations = 18,
 
     [string]$OutDir = ""
 )
@@ -90,6 +90,7 @@ $oldAssetName = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_ASSET_NAME",
 $oldGuideAlgo = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_GUIDE_ALGO", "Process")
 $oldTextureDir = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_TEXTURE_DIR", "Process")
 $oldMaxFitIterations = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_MAX_FIT_ITERATIONS", "Process")
+$oldOutDir = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_OUT_DIR", "Process")
 
 try {
     $env:AIRA_STAGE01_FBX_PATH = $WorkingFbx
@@ -97,6 +98,7 @@ try {
     $env:AIRA_STAGE01_GUIDE_ALGO = $GuideAlgorithm
     $env:AIRA_STAGE01_TEXTURE_DIR = $TextureSidecar
     $env:AIRA_STAGE01_MAX_FIT_ITERATIONS = $MaxFitIterations
+    $env:AIRA_STAGE01_OUT_DIR = $OutDir
 
     & $MaxBatch $BatchScript `
         -v 4 `
@@ -137,6 +139,13 @@ finally {
     }
     else {
         $env:AIRA_STAGE01_MAX_FIT_ITERATIONS = $oldMaxFitIterations
+    }
+
+    if ($null -eq $oldOutDir) {
+        Remove-Item Env:AIRA_STAGE01_OUT_DIR -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:AIRA_STAGE01_OUT_DIR = $oldOutDir
     }
 }
 
@@ -320,6 +329,7 @@ if ((Test-Path -LiteralPath $VisualReviewPackScript) -and (Test-Path -LiteralPat
 $OrganizedVisualReviewManifest = Resolve-AiraOutputPath "visual_review" "$SafeAssetName`_visual_evidence_manifest.json" (Join-Path (Join-Path $RunDir "visual_review") "$SafeAssetName`_visual_evidence_manifest.json")
 $OrganizedVisualReviewInput = Resolve-AiraOutputPath "visual_review" "review_input.md" (Join-Path (Join-Path $RunDir "visual_review") "review_input.md")
 $OrganizedVisualReviewSchema = Resolve-AiraOutputPath "visual_review" "review_schema.json" (Join-Path (Join-Path $RunDir "visual_review") "review_schema.json")
+$OrganizedSliceAnalysisJson = Join-Path (Join-Path (Join-Path $RunDir "visual_review") "slices") "slice_analysis.json"
 $OrganizedVisualScreenshotDir = Join-Path $RunDir "screenshots"
 if (-not (Test-Path -LiteralPath $OrganizedVisualScreenshotDir)) {
     $OrganizedVisualScreenshotDir = $VisualScreenshotDir
@@ -419,6 +429,7 @@ if ((Test-Path -LiteralPath $SkinPrepGateScript) -and (Test-Path -LiteralPath $O
         "--visual-qc-json", $OrganizedVisualQcJson,
         "--rig-detail-review-json", $OrganizedRigDetailReviewJson,
         "--rig-asset-qc-json", $OrganizedRigAssetQcJson,
+        "--slice-analysis-json", $OrganizedSliceAnalysisJson,
         "--out-dir", $FinalGateDataDir,
         "--md-out-dir", $FinalGateReportDir
     )

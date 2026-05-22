@@ -147,6 +147,11 @@ def clone_nodes(nodes: dict[str, list[float]]) -> dict[str, list[float]]:
     return {name: list(value) for name, value in nodes.items()}
 
 
+def snapshot_height(snapshot: dict[str, Any]) -> float:
+    bounds = snapshot.get("bounds", {})
+    return max(float(bounds.get("size", [0, 0, 1])[2]), 1.0)
+
+
 def segment_axes(start: list[float], end: list[float]) -> tuple[list[float], list[float], list[float], float]:
     axis_vec = vec_sub(end, start)
     length = vec_length(axis_vec)
@@ -169,8 +174,7 @@ def segment_samples(snapshot: dict[str, Any], start_name: str, end_name: str) ->
     axis, u_axis, v_axis, length = segment_axes(start, end)
     if length <= 1e-6:
         return []
-    bounds = snapshot.get("bounds", {})
-    height = max(float(bounds.get("size", [0, 0, 1])[2]), 1.0)
+    height = snapshot_height(snapshot)
     slab = max(height * 0.018, length * 0.10, 1.0)
     mesh_points = snapshot.get("meshPoints", [])
     samples: list[dict[str, Any]] = []
@@ -196,25 +200,64 @@ def segment_samples(snapshot: dict[str, Any], start_name: str, end_name: str) ->
     return samples
 
 
-def evaluate(snapshot: dict[str, Any]) -> dict[str, Any]:
+def nearest_mesh_distance(snapshot: dict[str, Any], center: list[float]) -> float:
+    mesh_points = snapshot.get("meshPoints", [])
+    if not mesh_points:
+        return 0.0
+    return min(vec_length(vec_sub(point, center)) for point in mesh_points)
+
+
+def sample_failure_penalty(snapshot: dict[str, Any], sample: dict[str, Any]) -> float:
+    if sample["strict"]:
+        return 0.0
+    height = snapshot_height(snapshot)
+    point_count = int(sample["pointCount"])
+    radial = sample["radialCoverage"]
+    missing_points = max(0.0, (12.0 - float(point_count)) / 12.0)
+    sector_gap = max(0.0, 0.62 - float(radial["sectorCoverage"])) / 0.62
+    quadrant_gap = max(0.0, 4.0 - float(radial["quadrantCount"])) / 4.0
+    if point_count < 12:
+        offset = nearest_mesh_distance(snapshot, sample["center"])
+    else:
+        offset = float(sample.get("offsetLength", 0.0))
+    offset_penalty = min(offset / max(height * 0.20, 1.0), 4.0)
+    return 1.0 + missing_points * 2.0 + sector_gap + quadrant_gap + offset_penalty
+
+
+def evaluate(snapshot: dict[str, Any], severity_segments: set[str] | None = None) -> dict[str, Any]:
     failures: list[dict[str, Any]] = []
     by_segment: dict[str, int] = {}
+    by_segment_severity: dict[str, float] = {}
+    total_severity = 0.0
     for start, end in ORDERED_SEGMENTS:
         segment = f"{start}->{end}"
         count = 0
+        severity = 0.0
+        collect_severity = severity_segments is None or segment in severity_segments
         for sample in segment_samples(snapshot, start, end):
             if not sample["strict"]:
+                penalty = sample_failure_penalty(snapshot, sample) if collect_severity else 0.0
                 count += 1
-                failures.append(
-                    {
-                        "segment": segment,
-                        "t": sample["t"],
-                        "wrapState": sample["wrapState"],
-                        "pointCount": sample["pointCount"],
-                    }
-                )
+                severity += penalty
+                total_severity += penalty
+                failure = {
+                    "segment": segment,
+                    "t": sample["t"],
+                    "wrapState": sample["wrapState"],
+                    "pointCount": sample["pointCount"],
+                }
+                if collect_severity:
+                    failure["penalty"] = round(penalty, 6)
+                failures.append(failure)
         by_segment[segment] = count
-    return {"failureCount": len(failures), "failures": failures, "bySegment": by_segment}
+        by_segment_severity[segment] = round(severity, 6)
+    return {
+        "failureCount": len(failures),
+        "severity": round(total_severity, 6),
+        "failures": failures,
+        "bySegment": by_segment,
+        "bySegmentSeverity": by_segment_severity,
+    }
 
 
 def clamp(vec: list[float], max_len: float) -> list[float]:
@@ -224,7 +267,31 @@ def clamp(vec: list[float], max_len: float) -> list[float]:
     return vec_scale(vec, max_len / length)
 
 
-def candidate_moves(snapshot: dict[str, Any], start: str, end: str, node: str, max_step: float) -> list[list[float]]:
+def axis_fallback_moves(max_step: float) -> list[list[float]]:
+    moves: list[list[float]] = []
+    axes = [
+        [1.0, 0.0, 0.0],
+        [-1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, -1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, -1.0],
+    ]
+    for fraction in (0.25, 0.5, 1.0):
+        for axis in axes:
+            moves.append(vec_scale(axis, max_step * fraction))
+    return moves
+
+
+def candidate_moves(
+    snapshot: dict[str, Any],
+    start: str,
+    end: str,
+    node: str,
+    max_step: float,
+    *,
+    include_axis_fallback: bool = True,
+) -> list[list[float]]:
     moves: list[list[float]] = []
     samples = segment_samples(snapshot, start, end)
     for sample in samples:
@@ -244,10 +311,8 @@ def candidate_moves(snapshot: dict[str, Any], start: str, end: str, node: str, m
         moves.append(vec_scale(move, 0.5))
         moves.append(vec_scale(move, 0.25))
 
-    axes = [[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, -1.0]]
-    for fraction in (0.25, 0.5, 1.0):
-        for axis in axes:
-            moves.append(vec_scale(axis, max_step * fraction))
+    if include_axis_fallback:
+        moves.extend(axis_fallback_moves(max_step))
 
     # Keep candidate list deterministic and compact.
     unique: dict[tuple[int, int, int], list[float]] = {}
@@ -257,6 +322,67 @@ def candidate_moves(snapshot: dict[str, Any], start: str, end: str, node: str, m
         key = tuple(int(round(v * 1000)) for v in move)
         unique[key] = move
     return list(unique.values())
+
+
+def nearest_mesh_offset(snapshot: dict[str, Any], center: list[float], *, k: int = 48) -> list[float]:
+    mesh_points = snapshot.get("meshPoints", [])
+    if not mesh_points:
+        return [0.0, 0.0, 0.0]
+    nearest = sorted(
+        ((vec_length(vec_sub(point, center)), point) for point in mesh_points),
+        key=lambda row: row[0],
+    )[: max(1, min(k, len(mesh_points)))]
+    return [
+        robust_center([float(point[axis]) - center[axis] for _, point in nearest])
+        for axis in range(3)
+    ]
+
+
+def low_point_recovery_moves(
+    snapshot: dict[str, Any],
+    start: str,
+    end: str,
+    node: str,
+    max_step: float,
+) -> list[list[float]]:
+    moves: list[list[float]] = []
+    samples = segment_samples(snapshot, start, end)
+    height = snapshot_height(snapshot)
+    max_nearest_distance = max(height * 0.35, max_step * 6.0)
+    for sample in samples:
+        if sample["strict"] or sample["pointCount"] >= 12:
+            continue
+        t = float(sample["t"])
+        influence = t if node == end else 1.0 - t
+        if influence <= 0.05:
+            continue
+        offset = nearest_mesh_offset(snapshot, sample["center"])
+        distance = vec_length(offset)
+        if distance <= 1e-6 or distance > max_nearest_distance:
+            continue
+        move = clamp(vec_scale(offset, 1.0 / influence), max_step)
+        moves.extend([move, vec_scale(move, 0.5), vec_scale(move, 0.25)])
+    return unique_moves(moves)
+
+
+def segment_translation_moves(snapshot: dict[str, Any], start: str, end: str, max_step: float) -> list[list[float]]:
+    moves: list[list[float]] = []
+    height = snapshot_height(snapshot)
+    max_nearest_distance = max(height * 0.35, max_step * 6.0)
+    for sample in segment_samples(snapshot, start, end):
+        if sample["strict"]:
+            continue
+        if sample["pointCount"] >= 12:
+            offset = sample.get("offset3d") or [0.0, 0.0, 0.0]
+        else:
+            offset = nearest_mesh_offset(snapshot, sample["center"])
+            if vec_length(offset) > max_nearest_distance:
+                continue
+        if vec_length(offset) <= 1e-6:
+            continue
+        move = clamp(offset, max_step)
+        moves.extend([move, vec_scale(move, 0.5), vec_scale(move, 0.25)])
+    return unique_moves(moves)
 
 
 def unique_moves(moves: list[list[float]]) -> list[list[float]]:
@@ -276,14 +402,7 @@ def chain_translation_moves(
 ) -> list[list[float]]:
     moves: list[list[float]] = []
     for start, end in chain_segments:
-        for sample in segment_samples(snapshot, start, end):
-            if sample["strict"] or sample["pointCount"] < 12:
-                continue
-            offset = sample.get("offset3d") or [0.0, 0.0, 0.0]
-            if vec_length(offset) <= 1e-6:
-                continue
-            move = clamp(offset, max_step)
-            moves.extend([move, vec_scale(move, 0.5), vec_scale(move, 0.25)])
+        moves.extend(segment_translation_moves(snapshot, start, end, max_step))
     return unique_moves(moves)
 
 
@@ -291,26 +410,130 @@ def segments_share_node(a: tuple[str, str], b: tuple[str, str]) -> bool:
     return a[0] in b or a[1] in b
 
 
-def score(snapshot: dict[str, Any], locked: list[tuple[str, str]], active: tuple[str, str]) -> tuple[int, int, int, int]:
-    result = evaluate(snapshot)
+def segment_prefers_axis_with_data(segment: tuple[str, str]) -> bool:
+    names = f"{segment[0]} {segment[1]}"
+    return any(token in names for token in ("Shoulder", "Elbow", "Wrist", "Clavicle"))
+
+
+def score_detail(
+    snapshot: dict[str, Any],
+    locked: list[tuple[str, str]],
+    active: tuple[str, str],
+) -> tuple[tuple[int, int, int, int], tuple[float, float, float, float]]:
     active_key = f"{active[0]}->{active[1]}"
+    related_segments = [
+        (s, e)
+        for s, e in ORDERED_SEGMENTS
+        if segments_share_node((s, e), active)
+    ]
+    severity_keys = {active_key}
+    severity_keys.update(f"{s}->{e}" for s, e in locked)
+    severity_keys.update(f"{s}->{e}" for s, e in related_segments)
+    result = evaluate(snapshot, severity_keys)
     locked_failures = sum(result["bySegment"].get(f"{s}->{e}", 0) for s, e in locked)
     related_failures = sum(
         result["bySegment"].get(f"{s}->{e}", 0)
-        for s, e in ORDERED_SEGMENTS
-        if segments_share_node((s, e), active)
+        for s, e in related_segments
     )
     active_failures = result["bySegment"].get(active_key, 0)
-    return active_failures, locked_failures, related_failures, result["failureCount"]
+    locked_severity = sum(result["bySegmentSeverity"].get(f"{s}->{e}", 0.0) for s, e in locked)
+    related_severity = sum(
+        result["bySegmentSeverity"].get(f"{s}->{e}", 0.0)
+        for s, e in related_segments
+    )
+    active_severity = result["bySegmentSeverity"].get(active_key, 0.0)
+    return (
+        (active_failures, locked_failures, related_failures, result["failureCount"]),
+        (
+            round(active_severity, 6),
+            round(locked_severity, 6),
+            round(related_severity, 6),
+            round(float(result["severity"]), 6),
+        ),
+    )
+
+
+def score(snapshot: dict[str, Any], locked: list[tuple[str, str]], active: tuple[str, str]) -> tuple[int, int, int, int]:
+    counts, _ = score_detail(snapshot, locked, active)
+    return counts
 
 
 def chain_score(snapshot: dict[str, Any], chain_segments: list[tuple[str, str]]) -> tuple[int, int, int]:
-    result = evaluate(snapshot)
+    counts, _ = chain_score_detail(snapshot, chain_segments)
+    return counts
+
+
+def chain_score_detail(
+    snapshot: dict[str, Any],
+    chain_segments: list[tuple[str, str]],
+) -> tuple[tuple[int, int, int], tuple[float, float, float]]:
     keys = {f"{start}->{end}" for start, end in chain_segments}
+    result = evaluate(snapshot, keys)
     chain_failures = sum(result["bySegment"].get(key, 0) for key in keys)
     global_failures = result["failureCount"]
     outside_failures = global_failures - chain_failures
-    return chain_failures, outside_failures, global_failures
+    chain_severity = sum(result["bySegmentSeverity"].get(key, 0.0) for key in keys)
+    global_severity = float(result["severity"])
+    outside_severity = global_severity - chain_severity
+    return (
+        (chain_failures, outside_failures, global_failures),
+        (round(chain_severity, 6), round(outside_severity, 6), round(global_severity, 6)),
+    )
+
+
+def protected_score_regressed(
+    trial_counts: tuple[int, ...],
+    current_counts: tuple[int, ...],
+    trial_severity: tuple[float, ...],
+    current_severity: tuple[float, ...],
+    protected_indices: tuple[int, ...],
+) -> bool:
+    for index in protected_indices:
+        if trial_counts[index] > current_counts[index]:
+            return True
+        if trial_counts[index] == current_counts[index] and trial_severity[index] > current_severity[index] + 1e-4:
+            return True
+    return False
+
+
+def segment_score_better(
+    trial_counts: tuple[int, int, int, int],
+    trial_severity: tuple[float, float, float, float],
+    best_counts: tuple[int, int, int, int],
+    best_severity: tuple[float, float, float, float],
+) -> bool:
+    if trial_counts[0] < best_counts[0]:
+        return True
+    if trial_counts[0] == best_counts[0] and trial_counts[2] < best_counts[2]:
+        return True
+    if trial_counts[0] == best_counts[0] and trial_counts[2] == best_counts[2] and trial_counts[3] < best_counts[3]:
+        return True
+    counts_tied = trial_counts[0] == best_counts[0] and trial_counts[2] == best_counts[2] and trial_counts[3] == best_counts[3]
+    if counts_tied and trial_severity[0] < best_severity[0] - 1e-4:
+        return True
+    if counts_tied and abs(trial_severity[0] - best_severity[0]) <= 1e-4 and trial_severity[2] < best_severity[2] - 1e-4:
+        return True
+    if counts_tied and abs(trial_severity[0] - best_severity[0]) <= 1e-4 and abs(trial_severity[2] - best_severity[2]) <= 1e-4:
+        return trial_severity[3] < best_severity[3] - 1e-4
+    return False
+
+
+def chain_score_better(
+    trial_counts: tuple[int, int, int],
+    trial_severity: tuple[float, float, float],
+    best_counts: tuple[int, int, int],
+    best_severity: tuple[float, float, float],
+) -> bool:
+    if trial_counts[0] < best_counts[0]:
+        return True
+    if trial_counts[0] == best_counts[0] and trial_counts[2] < best_counts[2]:
+        return True
+    counts_tied = trial_counts[0] == best_counts[0] and trial_counts[2] == best_counts[2]
+    if counts_tied and trial_severity[0] < best_severity[0] - 1e-4:
+        return True
+    if counts_tied and abs(trial_severity[0] - best_severity[0]) <= 1e-4:
+        return trial_severity[2] < best_severity[2] - 1e-4
+    return False
 
 
 def refine_leg_chain(
@@ -323,8 +546,9 @@ def refine_leg_chain(
 ) -> dict[str, Any]:
     chain_segments = [(str(start), str(end)) for start, end in chain["segments"]]
     chain_nodes = [str(node) for node in chain["nodes"]]
-    current = chain_score(snapshot, chain_segments)
+    current, current_severity = chain_score_detail(snapshot, chain_segments)
     before = current
+    before_severity = current_severity
     trace: list[dict[str, Any]] = []
     accepted_moves = 0
     stop_reason = "already_green" if current[0] == 0 else "no_positive_candidate"
@@ -333,6 +557,8 @@ def refine_leg_chain(
             "chain": chain["name"],
             "before": current,
             "after": current,
+            "beforeSeverity": current_severity,
+            "afterSeverity": current_severity,
             "acceptedMoves": 0,
             "stopReason": stop_reason,
             "trace": trace,
@@ -342,6 +568,7 @@ def refine_leg_chain(
         nodes = node_positions(snapshot)
         best_nodes: dict[str, list[float]] | None = None
         best_score = current
+        best_severity = current_severity
         best_move: list[float] | None = None
         best_move_node = "chain"
 
@@ -357,16 +584,14 @@ def refine_leg_chain(
             if missing:
                 continue
             update_snapshot_nodes(snapshot, trial_nodes)
-            trial_score = chain_score(snapshot, chain_segments)
+            trial_score, trial_severity = chain_score_detail(snapshot, chain_segments)
             update_snapshot_nodes(snapshot, original_nodes)
-            if trial_score[1] > current[1] or trial_score[2] > current[2]:
+            if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2)):
                 continue
-            better = trial_score[0] < best_score[0] or (
-                trial_score[0] == best_score[0] and trial_score[2] < best_score[2]
-            )
-            if better:
+            if chain_score_better(trial_score, trial_severity, best_score, best_severity):
                 best_nodes = trial_nodes
                 best_score = trial_score
+                best_severity = trial_severity
                 best_move = move
                 best_move_node = "chain"
 
@@ -377,25 +602,46 @@ def refine_leg_chain(
                 adjacent_segments = [segment for segment in chain_segments if move_node in segment]
                 moves: list[list[float]] = []
                 for start, end in adjacent_segments:
-                    moves.extend(candidate_moves(snapshot, start, end, move_node, max_step))
+                    moves.extend(candidate_moves(snapshot, start, end, move_node, max_step, include_axis_fallback=False))
+                    moves.extend(low_point_recovery_moves(snapshot, start, end, move_node, max_step))
+                if not moves:
+                    for start, end in adjacent_segments:
+                        moves.extend(candidate_moves(snapshot, start, end, move_node, max_step))
                 for move in unique_moves(moves):
                     trial_nodes = clone_nodes(original_nodes)
                     trial_nodes[move_node] = vec_add(trial_nodes[move_node], move)
                     update_snapshot_nodes(snapshot, trial_nodes)
-                    trial_score = chain_score(snapshot, chain_segments)
+                    trial_score, trial_severity = chain_score_detail(snapshot, chain_segments)
                     update_snapshot_nodes(snapshot, original_nodes)
-                    if trial_score[1] > current[1] or trial_score[2] > current[2]:
+                    if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2)):
                         continue
-                    better = trial_score[0] < best_score[0] or (
-                        trial_score[0] == best_score[0] and trial_score[2] < best_score[2]
-                    )
-                    if better:
+                    if chain_score_better(trial_score, trial_severity, best_score, best_severity):
                         best_nodes = trial_nodes
                         best_score = trial_score
+                        best_severity = trial_severity
                         best_move = move
                         best_move_node = move_node
 
-        if best_nodes is None or best_score == current:
+            if best_nodes is None:
+                for move_node in chain_nodes:
+                    if move_node not in nodes:
+                        continue
+                    for move in axis_fallback_moves(max_step):
+                        trial_nodes = clone_nodes(original_nodes)
+                        trial_nodes[move_node] = vec_add(trial_nodes[move_node], move)
+                        update_snapshot_nodes(snapshot, trial_nodes)
+                        trial_score, trial_severity = chain_score_detail(snapshot, chain_segments)
+                        update_snapshot_nodes(snapshot, original_nodes)
+                        if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2)):
+                            continue
+                        if chain_score_better(trial_score, trial_severity, best_score, best_severity):
+                            best_nodes = trial_nodes
+                            best_score = trial_score
+                            best_severity = trial_severity
+                            best_move = move
+                            best_move_node = move_node
+
+        if best_nodes is None or (best_score == current and best_severity == current_severity):
             stop_reason = "no_positive_candidate"
             break
 
@@ -411,9 +657,15 @@ def refine_leg_chain(
                     "outside": best_score[1],
                     "global": best_score[2],
                 },
+                "severity": {
+                    "chain": best_severity[0],
+                    "outside": best_severity[1],
+                    "global": best_severity[2],
+                },
             }
         )
         current = best_score
+        current_severity = best_severity
         stop_reason = "chain_green" if current[0] == 0 else "improving"
         if current[0] == 0:
             break
@@ -422,6 +674,8 @@ def refine_leg_chain(
         "chain": chain["name"],
         "before": before,
         "after": current,
+        "beforeSeverity": before_severity,
+        "afterSeverity": current_severity,
         "acceptedMoves": accepted_moves,
         "stopReason": stop_reason,
         "trace": trace,
@@ -439,8 +693,9 @@ def refine_segment(
 ) -> dict[str, Any]:
     start, end = segment
     trace: list[dict[str, Any]] = []
-    before = score(snapshot, locked, segment)
+    before, before_severity = score_detail(snapshot, locked, segment)
     current = before
+    current_severity = before_severity
     accepted_moves = 0
     stop_reason = "already_green" if current[0] == 0 else "no_positive_candidate"
     if current[0] == 0:
@@ -448,6 +703,8 @@ def refine_segment(
             "segment": f"{start}->{end}",
             "before": before,
             "after": current,
+            "beforeSeverity": before_severity,
+            "afterSeverity": current_severity,
             "acceptedMoves": 0,
             "stopReason": stop_reason,
             "trace": trace,
@@ -460,36 +717,77 @@ def refine_segment(
             break
         best_nodes: dict[str, list[float]] | None = None
         best_score = current
+        best_severity = current_severity
         best_move: list[float] | None = None
         move_nodes = (end, start) if allow_start_backtrack else (end,)
+        include_axis_with_data = segment_prefers_axis_with_data(segment)
         original_nodes = node_positions(snapshot)
         for move_node in move_nodes:
             if move_node not in nodes:
                 continue
-            for move in candidate_moves(snapshot, start, end, move_node, max_step):
+            moves = candidate_moves(
+                snapshot,
+                start,
+                end,
+                move_node,
+                max_step,
+                include_axis_fallback=include_axis_with_data,
+            )
+            moves.extend(low_point_recovery_moves(snapshot, start, end, move_node, max_step))
+            if not moves:
+                moves = candidate_moves(snapshot, start, end, move_node, max_step)
+            for move in unique_moves(moves):
                 trial_nodes = clone_nodes(original_nodes)
                 trial_nodes[move_node] = vec_add(trial_nodes[move_node], move)
                 update_snapshot_nodes(snapshot, trial_nodes)
-                trial_score = score(snapshot, locked, segment)
+                trial_score, trial_severity = score_detail(snapshot, locked, segment)
                 update_snapshot_nodes(snapshot, original_nodes)
                 # Locked, adjacent, and global sections must not regress.
-                if trial_score[1] > current[1] or trial_score[2] > current[2] or trial_score[3] > current[3]:
+                if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2, 3)):
                     continue
-                better = (
-                    trial_score[0] < best_score[0]
-                    or (trial_score[0] == best_score[0] and trial_score[2] < best_score[2])
-                    or (
-                        trial_score[0] == best_score[0]
-                        and trial_score[2] == best_score[2]
-                        and trial_score[3] < best_score[3]
-                    )
-                )
-                if better:
+                if segment_score_better(trial_score, trial_severity, best_score, best_severity):
                     best_nodes = trial_nodes
                     best_score = trial_score
+                    best_severity = trial_severity
                     best_move = move
                     best_move_node = move_node
-        if best_nodes is None or best_score == current:
+
+        if start in nodes and end in nodes:
+            for move in segment_translation_moves(snapshot, start, end, max_step):
+                trial_nodes = clone_nodes(original_nodes)
+                trial_nodes[start] = vec_add(trial_nodes[start], move)
+                trial_nodes[end] = vec_add(trial_nodes[end], move)
+                update_snapshot_nodes(snapshot, trial_nodes)
+                trial_score, trial_severity = score_detail(snapshot, locked, segment)
+                update_snapshot_nodes(snapshot, original_nodes)
+                if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2, 3)):
+                    continue
+                if segment_score_better(trial_score, trial_severity, best_score, best_severity):
+                    best_nodes = trial_nodes
+                    best_score = trial_score
+                    best_severity = trial_severity
+                    best_move = move
+                    best_move_node = f"{start}+{end}"
+
+        if best_nodes is None:
+            for move_node in move_nodes:
+                if move_node not in nodes:
+                    continue
+                for move in axis_fallback_moves(max_step):
+                    trial_nodes = clone_nodes(original_nodes)
+                    trial_nodes[move_node] = vec_add(trial_nodes[move_node], move)
+                    update_snapshot_nodes(snapshot, trial_nodes)
+                    trial_score, trial_severity = score_detail(snapshot, locked, segment)
+                    update_snapshot_nodes(snapshot, original_nodes)
+                    if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2, 3)):
+                        continue
+                    if segment_score_better(trial_score, trial_severity, best_score, best_severity):
+                        best_nodes = trial_nodes
+                        best_score = trial_score
+                        best_severity = trial_severity
+                        best_move = move
+                        best_move_node = move_node
+        if best_nodes is None or (best_score == current and best_severity == current_severity):
             stop_reason = "no_positive_candidate"
             break
         update_snapshot_nodes(snapshot, best_nodes)
@@ -505,9 +803,16 @@ def refine_segment(
                     "related": best_score[2],
                     "global": best_score[3],
                 },
+                "severity": {
+                    "active": best_severity[0],
+                    "locked": best_severity[1],
+                    "related": best_severity[2],
+                    "global": best_severity[3],
+                },
             }
         )
         current = best_score
+        current_severity = best_severity
         if current[0] == 0:
             stop_reason = "segment_green"
             break
@@ -515,6 +820,8 @@ def refine_segment(
         "segment": f"{start}->{end}",
         "before": before,
         "after": current,
+        "beforeSeverity": before_severity,
+        "afterSeverity": current_severity,
         "acceptedMoves": accepted_moves,
         "stopReason": stop_reason,
         "trace": trace,
@@ -531,8 +838,7 @@ def run_probe(
     max_chain_iters: int,
     leg_chain_node_moves: bool,
 ) -> dict[str, Any]:
-    bounds = snapshot.get("bounds", {})
-    height = max(float(bounds.get("size", [0, 0, 1])[2]), 1.0)
+    height = snapshot_height(snapshot)
     max_step = max(height * max_step_ratio, 1.0)
     initial = evaluate(snapshot)
     locked: list[tuple[str, str]] = []

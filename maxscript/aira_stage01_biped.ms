@@ -1485,6 +1485,26 @@ struct AIRAStage01Tool
         #(0.0, 0.25, 0.50, 0.75, 1.0)
     ),
 
+    fn ctNearestPointOffset pts center =
+    (
+        local bestOffset = [0, 0, 0]
+        local bestDistance = 1e9
+        if pts != undefined do
+        (
+            for p in pts do
+            (
+                local delta = p - center
+                local d = length delta
+                if d < bestDistance do
+                (
+                    bestDistance = d
+                    bestOffset = delta
+                )
+            )
+        )
+        #(bestOffset, bestDistance)
+    ),
+
     fn ctSectionStats pts center axis uAxis vAxis slab h =
     (
         local us = #()
@@ -1514,7 +1534,8 @@ struct AIRAStage01Tool
 
         if us.count < 12 then
         (
-            #(false, us.count, 0.0, 0.0, 0.0, "insufficient_slice_points", 0.0, 0)
+            local nearest = ctNearestPointOffset pts center
+            #(false, us.count, 0.0, 0.0, nearest[2], "insufficient_slice_points", 0.0, 0, nearest[1])
         )
         else
         (
@@ -1553,7 +1574,26 @@ struct AIRAStage01Tool
             local sectorWrap = sectorCoverage >= ctWrapMinSectorCoverage
             local ok = axisContainsCenter and quadrantWrap and sectorWrap
             local state = if ok then "strictly_wrapped" else (if not axisContainsCenter then "center_outside_axis_range" else (if not quadrantWrap then "insufficient_radial_quadrants" else "insufficient_radial_sector_coverage"))
-            #(ok, us.count, uCenter, vCenter, (if ok then 0.0 else offsetLen), state, sectorCoverage, quadrantCount)
+            local offset3d = (uAxis * uCenter) + (vAxis * vCenter)
+            #(ok, us.count, uCenter, vCenter, (if ok then 0.0 else offsetLen), state, sectorCoverage, quadrantCount, offset3d)
+        )
+    ),
+
+    fn ctSampleFailurePenalty stats h =
+    (
+        if stats[1] then 0.0
+        else
+        (
+            local pointCount = stats[2] as float
+            local missingPoints = (12.0 - pointCount) / 12.0
+            if missingPoints < 0.0 do missingPoints = 0.0
+            local sectorGap = (ctWrapMinSectorCoverage - stats[7]) / ctWrapMinSectorCoverage
+            if sectorGap < 0.0 do sectorGap = 0.0
+            local quadrantGap = (4.0 - (stats[8] as float)) / 4.0
+            if quadrantGap < 0.0 do quadrantGap = 0.0
+            local offsetPenalty = stats[5] / (h * 0.20)
+            if offsetPenalty > 4.0 do offsetPenalty = 4.0
+            1.0 + (missingPoints * 2.0) + sectorGap + quadrantGap + offsetPenalty
         )
     ),
 
@@ -1564,12 +1604,12 @@ struct AIRAStage01Tool
         local startPos = if startNode != undefined then getBipedNodePosition startNode else undefined
         local endPos = if endNode != undefined then getBipedNodePosition endNode else undefined
         local stations = ctSampleStations()
-        if startPos == undefined or endPos == undefined then #(stations.count, 0.0, 0, #((seg[1] as string) + "->" + (seg[2] as string)))
+        if startPos == undefined or endPos == undefined then #(stations.count, 0.0, 0, #((seg[1] as string) + "->" + (seg[2] as string)), (stations.count as float))
         else
         (
             local axisVec = endPos - startPos
             local segLen = length axisVec
-            if segLen < 0.001 then #(stations.count, 0.0, 0, #((seg[1] as string) + "->" + (seg[2] as string) + " zero_length"))
+            if segLen < 0.001 then #(stations.count, 0.0, 0, #((seg[1] as string) + "->" + (seg[2] as string) + " zero_length"), (stations.count as float))
             else
             (
                 local axis = safeNormalize axisVec [0, 0, 1]
@@ -1585,6 +1625,7 @@ struct AIRAStage01Tool
                 local maxOffset = 0.0
                 local samples = 0
                 local missing = #()
+                local severity = 0.0
                 for t in stations do
                 (
                     local center = startPos + (axisVec * t)
@@ -1592,8 +1633,9 @@ struct AIRAStage01Tool
                     samples += 1
                     if stats[5] > maxOffset do maxOffset = stats[5]
                     if not stats[1] do failures += 1
+                    severity += ctSampleFailurePenalty stats h
                 )
-                #(failures, maxOffset, samples, missing)
+                #(failures, maxOffset, samples, missing, severity)
             )
         )
     ),
@@ -1754,6 +1796,17 @@ struct AIRAStage01Tool
         failures
     ),
 
+    fn ctLockedSeverity bipRoot lockedSegments pts h =
+    (
+        local severity = 0.0
+        for seg in lockedSegments do
+        (
+            local diag = ctSegmentDiagnostics bipRoot seg pts h
+            severity += diag[5]
+        )
+        severity
+    ),
+
     fn ctSegmentsShareNode a b =
     (
         (a[1] == b[1]) or (a[1] == b[2]) or (a[2] == b[1]) or (a[2] == b[2])
@@ -1771,6 +1824,20 @@ struct AIRAStage01Tool
             )
         )
         failures
+    ),
+
+    fn ctRelatedSeverity bipRoot activeSeg pts h =
+    (
+        local severity = 0.0
+        for seg in orderedCtRefineSegments() do
+        (
+            if ctSegmentsShareNode seg activeSeg do
+            (
+                local diag = ctSegmentDiagnostics bipRoot seg pts h
+                severity += diag[5]
+            )
+        )
+        severity
     ),
 
     fn ctCaptureBipedPositions bipRoot =
@@ -1868,6 +1935,33 @@ struct AIRAStage01Tool
         if move != undefined and (length move) > 0.0001 do append moves move
     ),
 
+    fn ctAxisFallbackMoves maxStep =
+    (
+        local moves = #()
+        for fraction in #(0.25, 0.50, 1.0) do
+        (
+            ctAppendCandidateMove moves ([1, 0, 0] * maxStep * fraction)
+            ctAppendCandidateMove moves ([-1, 0, 0] * maxStep * fraction)
+            ctAppendCandidateMove moves ([0, 1, 0] * maxStep * fraction)
+            ctAppendCandidateMove moves ([0, -1, 0] * maxStep * fraction)
+            ctAppendCandidateMove moves ([0, 0, 1] * maxStep * fraction)
+            ctAppendCandidateMove moves ([0, 0, -1] * maxStep * fraction)
+        )
+        moves
+    ),
+
+    fn ctSegmentPrefersAxisWithData seg =
+    (
+        (matchPattern seg[1] pattern:"*Shoulder*" ignoreCase:true) or \
+        (matchPattern seg[2] pattern:"*Shoulder*" ignoreCase:true) or \
+        (matchPattern seg[1] pattern:"*Elbow*" ignoreCase:true) or \
+        (matchPattern seg[2] pattern:"*Elbow*" ignoreCase:true) or \
+        (matchPattern seg[1] pattern:"*Wrist*" ignoreCase:true) or \
+        (matchPattern seg[2] pattern:"*Wrist*" ignoreCase:true) or \
+        (matchPattern seg[1] pattern:"*Clavicle*" ignoreCase:true) or \
+        (matchPattern seg[2] pattern:"*Clavicle*" ignoreCase:true)
+    ),
+
     fn ctCandidateMovesForNode bipRoot seg moveGuideName pts h maxStep =
     (
         local moves = #()
@@ -1905,18 +1999,70 @@ struct AIRAStage01Tool
                         ctAppendCandidateMove moves (offset * 0.5)
                         ctAppendCandidateMove moves (offset * 0.25)
                     )
+                    if (not stats[1]) and stats[2] < 12 and stats[5] > (h * ctWrapToleranceRatio) and stats[5] <= (h * 0.35) do
+                    (
+                        local influence = if moveGuideName == seg[2] then t else (1.0 - t)
+                        if influence > 0.05 do
+                        (
+                            local offset = stats[9] * (1.0 / influence)
+                            offset = clampVectorStep offset maxStep
+                            ctAppendCandidateMove moves offset
+                            ctAppendCandidateMove moves (offset * 0.5)
+                            ctAppendCandidateMove moves (offset * 0.25)
+                        )
+                    )
                 )
             )
         )
 
-        for fraction in #(0.25, 0.50, 1.0) do
+        if (moves.count == 0) or (ctSegmentPrefersAxisWithData seg) do
         (
-            ctAppendCandidateMove moves ([1, 0, 0] * maxStep * fraction)
-            ctAppendCandidateMove moves ([-1, 0, 0] * maxStep * fraction)
-            ctAppendCandidateMove moves ([0, 1, 0] * maxStep * fraction)
-            ctAppendCandidateMove moves ([0, -1, 0] * maxStep * fraction)
-            ctAppendCandidateMove moves ([0, 0, 1] * maxStep * fraction)
-            ctAppendCandidateMove moves ([0, 0, -1] * maxStep * fraction)
+            for move in (ctAxisFallbackMoves maxStep) do append moves move
+        )
+        moves
+    ),
+
+    fn ctCandidateTranslationMovesForSegment bipRoot seg pts h maxStep =
+    (
+        local moves = #()
+        local startNode = bipedNodeForGuide bipRoot seg[1]
+        local endNode = bipedNodeForGuide bipRoot seg[2]
+        local startPos = if startNode != undefined then getBipedNodePosition startNode else undefined
+        local endPos = if endNode != undefined then getBipedNodePosition endNode else undefined
+        if startPos != undefined and endPos != undefined do
+        (
+            local axisVec = endPos - startPos
+            local segLen = length axisVec
+            if segLen > 0.001 do
+            (
+                local axis = safeNormalize axisVec [0, 0, 1]
+                local ref = [0, 0, 1]
+                if (abs (dot3 axis ref)) > 0.86 do ref = [1, 0, 0]
+                local uAxis = safeNormalize (cross3 axis ref) [1, 0, 0]
+                local vAxis = safeNormalize (cross3 axis uAxis) [0, 1, 0]
+                local slab = h * 0.018
+                if (segLen * 0.100) > slab do slab = segLen * 0.100
+                if slab < 1.0 do slab = 1.0
+                local stations = ctSampleStations()
+
+                for t in stations do
+                (
+                    local center = startPos + (axisVec * t)
+                    local stats = ctSectionStats pts center axis uAxis vAxis slab h
+                    if not stats[1] do
+                    (
+                        local offset = stats[9]
+                        if stats[2] < 12 and stats[5] > (h * 0.35) do offset = [0, 0, 0]
+                        if (length offset) > (h * ctWrapToleranceRatio) do
+                        (
+                            offset = clampVectorStep offset maxStep
+                            ctAppendCandidateMove moves offset
+                            ctAppendCandidateMove moves (offset * 0.5)
+                            ctAppendCandidateMove moves (offset * 0.25)
+                        )
+                    )
+                )
+            )
         )
         moves
     ),
@@ -1926,14 +2072,17 @@ struct AIRAStage01Tool
         local activeDiag = ctSegmentDiagnostics bipRoot seg pts h
         local lockedFailures = ctLockedFailureCount bipRoot lockedSegments pts h
         local relatedFailures = ctRelatedFailureCount bipRoot seg pts h
-        #(activeDiag[1], lockedFailures, relatedFailures, 0, activeDiag[2])
+        local lockedSeverity = ctLockedSeverity bipRoot lockedSegments pts h
+        local relatedSeverity = ctRelatedSeverity bipRoot seg pts h
+        #(activeDiag[1], lockedFailures, relatedFailures, 0, activeDiag[2], activeDiag[5], lockedSeverity, relatedSeverity)
     ),
 
     fn ctTrialScoreBetter trialScore bestScore =
     (
         (trialScore[1] < bestScore[1]) or \
         (trialScore[1] == bestScore[1] and trialScore[3] < bestScore[3]) or \
-        (trialScore[1] == bestScore[1] and trialScore[3] == bestScore[3] and trialScore[5] < bestScore[5])
+        (trialScore[1] == bestScore[1] and trialScore[3] == bestScore[3] and trialScore[6] < (bestScore[6] - 0.0001)) or \
+        (trialScore[1] == bestScore[1] and trialScore[3] == bestScore[3] and (abs (trialScore[6] - bestScore[6])) <= 0.0001 and trialScore[5] < bestScore[5])
     ),
 
     fn ctVolumeDiagBetter trialDiag bestDiag =
@@ -1966,7 +2115,7 @@ struct AIRAStage01Tool
         (
             local bestScore = currentScore
             local bestMove = undefined
-            local bestGuideName = ""
+            local bestGuideNames = #()
             local moveGuides = #(seg[2])
             if allowStartBacktrack do append moveGuides seg[1]
 
@@ -1981,13 +2130,69 @@ struct AIRAStage01Tool
                         if setBipedNodePosition node (oldPos + move) do
                         (
                             local trialScore = ctScoreSegment bipRoot seg lockedSegments pts h
-                            if trialScore[2] <= currentScore[2] and trialScore[3] <= currentScore[3] and (ctTrialScoreBetter trialScore bestScore) do
+                            local lockedOkSingle = (trialScore[2] < currentScore[2]) or (trialScore[2] == currentScore[2] and trialScore[7] <= (currentScore[7] + 0.0001))
+                            local relatedOkSingle = (trialScore[3] < currentScore[3]) or (trialScore[3] == currentScore[3] and trialScore[8] <= (currentScore[8] + 0.0001))
+                            if lockedOkSingle and relatedOkSingle and (ctTrialScoreBetter trialScore bestScore) do
                             (
                                 bestScore = trialScore
                                 bestMove = move
-                                bestGuideName = guideName
+                                bestGuideNames = #(guideName)
                             )
                             setBipedNodePosition node oldPos
+                        )
+                    )
+                )
+            )
+
+            if startNode != undefined and endNode != undefined do
+            (
+                local startOldPos = getBipedNodePosition startNode
+                local endOldPos = getBipedNodePosition endNode
+                if startOldPos != undefined and endOldPos != undefined do
+                (
+                    for move in (ctCandidateTranslationMovesForSegment bipRoot seg pts h maxStep) do
+                    (
+                        if (setBipedNodePosition startNode (startOldPos + move)) and (setBipedNodePosition endNode (endOldPos + move)) do
+                        (
+                            local trialScore = ctScoreSegment bipRoot seg lockedSegments pts h
+                            local lockedOkPair = (trialScore[2] < currentScore[2]) or (trialScore[2] == currentScore[2] and trialScore[7] <= (currentScore[7] + 0.0001))
+                            local relatedOkPair = (trialScore[3] < currentScore[3]) or (trialScore[3] == currentScore[3] and trialScore[8] <= (currentScore[8] + 0.0001))
+                            if lockedOkPair and relatedOkPair and (ctTrialScoreBetter trialScore bestScore) do
+                            (
+                                bestScore = trialScore
+                                bestMove = move
+                                bestGuideNames = #(seg[1], seg[2])
+                            )
+                        )
+                        setBipedNodePosition startNode startOldPos
+                        setBipedNodePosition endNode endOldPos
+                    )
+                )
+            )
+
+            if bestMove == undefined do
+            (
+                for guideName in moveGuides do
+                (
+                    local node = bipedNodeForGuide bipRoot guideName
+                    local oldPos = if node != undefined then getBipedNodePosition node else undefined
+                    if oldPos != undefined do
+                    (
+                        for move in (ctAxisFallbackMoves maxStep) do
+                        (
+                            if setBipedNodePosition node (oldPos + move) do
+                            (
+                                local trialScore = ctScoreSegment bipRoot seg lockedSegments pts h
+                                local lockedOkAxis = (trialScore[2] < currentScore[2]) or (trialScore[2] == currentScore[2] and trialScore[7] <= (currentScore[7] + 0.0001))
+                                local relatedOkAxis = (trialScore[3] < currentScore[3]) or (trialScore[3] == currentScore[3] and trialScore[8] <= (currentScore[8] + 0.0001))
+                                if lockedOkAxis and relatedOkAxis and (ctTrialScoreBetter trialScore bestScore) do
+                                (
+                                    bestScore = trialScore
+                                    bestMove = move
+                                    bestGuideNames = #(guideName)
+                                )
+                                setBipedNodePosition node oldPos
+                            )
                         )
                     )
                 )
@@ -2000,16 +2205,20 @@ struct AIRAStage01Tool
             )
             else
             (
-                local bestNode = bipedNodeForGuide bipRoot bestGuideName
-                local bestOldPos = if bestNode != undefined then getBipedNodePosition bestNode else undefined
-                if bestOldPos == undefined then
+                local applied = 0
+                for guideName in bestGuideNames do
+                (
+                    local bestNode = bipedNodeForGuide bipRoot guideName
+                    local bestOldPos = if bestNode != undefined then getBipedNodePosition bestNode else undefined
+                    if bestOldPos != undefined and setBipedNodePosition bestNode (bestOldPos + bestMove) do applied += 1
+                )
+                if applied == 0 then
                 (
                     stopReason = "missing_candidate_node"
                     exit
                 )
                 else
                 (
-                    setBipedNodePosition bestNode (bestOldPos + bestMove)
                     currentScore = bestScore
                     iterations = localIter
                     acceptedMoves += 1

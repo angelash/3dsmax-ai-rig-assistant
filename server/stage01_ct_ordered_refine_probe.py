@@ -164,7 +164,54 @@ def segment_axes(start: list[float], end: list[float]) -> tuple[list[float], lis
     return axis, u_axis, v_axis, length
 
 
-def segment_samples(snapshot: dict[str, Any], start_name: str, end_name: str) -> list[dict[str, Any]]:
+def is_foot_segment(start_name: str, end_name: str) -> bool:
+    return start_name.endswith("_Ankle") and end_name.endswith("_Toe")
+
+
+def apply_foot_planar_rule(
+    snapshot: dict[str, Any],
+    sample: dict[str, Any],
+    *,
+    segment_length: float,
+    height: float,
+) -> None:
+    if sample["strict"]:
+        return
+    radial = sample["radialCoverage"]
+    point_count = int(sample["pointCount"])
+    foot_offset_tolerance = max(height * 0.075, segment_length * 0.35)
+    toe_endpoint_tolerance = max(height * 0.12, segment_length * 0.55)
+
+    if point_count >= 12:
+        planar_hull_wrap = (
+            sample["hullContainsCenter"]
+            and radial["quadrantCount"] >= 3
+            and radial["sectorCoverage"] >= 0.38
+        )
+        near_foot_plane = (
+            sample["offsetLength"] <= foot_offset_tolerance
+            and radial["sectorCoverage"] >= 0.25
+            and radial["quadrantCount"] >= 2
+        )
+        if planar_hull_wrap or near_foot_plane:
+            sample["strict"] = True
+            sample["wrapState"] = "foot_planar_wrapped"
+        return
+
+    nearest = nearest_mesh_distance(snapshot, sample["center"])
+    sample["nearestDistance"] = nearest
+    if float(sample["t"]) >= 0.75 and nearest <= toe_endpoint_tolerance:
+        sample["strict"] = True
+        sample["wrapState"] = "foot_endpoint_close"
+
+
+def segment_samples(
+    snapshot: dict[str, Any],
+    start_name: str,
+    end_name: str,
+    *,
+    foot_planar: bool = False,
+) -> list[dict[str, Any]]:
     nodes = node_positions(snapshot)
     if start_name not in nodes or end_name not in nodes:
         return []
@@ -196,6 +243,8 @@ def segment_samples(snapshot: dict[str, Any], start_name: str, end_name: str) ->
             info["offsetLength"] = vec_length(info["offset3d"])
         else:
             info["offsetLength"] = 0.0
+        if foot_planar and is_foot_segment(start_name, end_name):
+            apply_foot_planar_rule(snapshot, info, segment_length=length, height=height)
         samples.append(info)
     return samples
 
@@ -224,7 +273,12 @@ def sample_failure_penalty(snapshot: dict[str, Any], sample: dict[str, Any]) -> 
     return 1.0 + missing_points * 2.0 + sector_gap + quadrant_gap + offset_penalty
 
 
-def evaluate(snapshot: dict[str, Any], severity_segments: set[str] | None = None) -> dict[str, Any]:
+def evaluate(
+    snapshot: dict[str, Any],
+    severity_segments: set[str] | None = None,
+    *,
+    foot_planar: bool = False,
+) -> dict[str, Any]:
     failures: list[dict[str, Any]] = []
     by_segment: dict[str, int] = {}
     by_segment_severity: dict[str, float] = {}
@@ -234,7 +288,7 @@ def evaluate(snapshot: dict[str, Any], severity_segments: set[str] | None = None
         count = 0
         severity = 0.0
         collect_severity = severity_segments is None or segment in severity_segments
-        for sample in segment_samples(snapshot, start, end):
+        for sample in segment_samples(snapshot, start, end, foot_planar=foot_planar):
             if not sample["strict"]:
                 penalty = sample_failure_penalty(snapshot, sample) if collect_severity else 0.0
                 count += 1
@@ -869,6 +923,7 @@ def run_probe(
             result["before"] = before
             chain_results.append(result)
     final = evaluate(snapshot)
+    final_role_aware = evaluate(snapshot, foot_planar=True)
     return {
         "mode": "ordered_agent_controlled_ct_probe",
         "maxSegmentIterations": max_segment_iters,
@@ -879,6 +934,7 @@ def run_probe(
         "maxStep": round(max_step, 6),
         "initial": initial,
         "final": final,
+        "finalRoleAware": final_role_aware,
         "lockedSegments": [f"{s}->{e}" for s, e in locked],
         "segments": segment_results,
         "chains": chain_results,
@@ -945,6 +1001,7 @@ def main() -> int:
         "",
         f"- Initial strict CT failures: `{result['initial']['failureCount']}`",
         f"- Final strict CT failures: `{result['final']['failureCount']}`",
+        f"- Final role-aware CT failures: `{result['finalRoleAware']['failureCount']}`",
         f"- Locked green segments: `{len(result['lockedSegments'])}` / `{len(ORDERED_SEGMENTS)}`",
         f"- Max local step: `{result['maxStep']}`",
         "",
@@ -983,7 +1040,20 @@ def main() -> int:
             )
     (out_dir / "README.md").write_text("\n".join(md_lines) + "\n", encoding="utf-8")
 
-    print(json.dumps({"ok": True, "assetName": asset_name, "outDir": str(out_dir), "initialFailures": result["initial"]["failureCount"], "finalFailures": result["final"]["failureCount"]}, ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "assetName": asset_name,
+                "outDir": str(out_dir),
+                "initialFailures": result["initial"]["failureCount"],
+                "finalFailures": result["final"]["failureCount"],
+                "finalRoleAwareFailures": result["finalRoleAware"]["failureCount"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 

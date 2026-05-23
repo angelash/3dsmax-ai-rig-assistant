@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import heapq
 import json
 import math
 from pathlib import Path
@@ -72,6 +73,16 @@ LEG_CHAINS: list[dict[str, Any]] = [
 
 PROBE_STATIONS = list(SLICE_SAMPLE_STATIONS)
 FLOOR_CLAMP = True
+BEST_OF_LEG_START_BACKTRACK_MAX_FAILURES = 12
+
+LEG_START_BACKTRACK_SEGMENTS: set[tuple[str, str]] = {
+    ("L_Hip", "L_Knee"),
+    ("L_Knee", "L_Ankle"),
+    ("L_Ankle", "L_Toe"),
+    ("R_Hip", "R_Knee"),
+    ("R_Knee", "R_Ankle"),
+    ("R_Ankle", "R_Toe"),
+}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -193,6 +204,10 @@ def is_foot_segment(start_name: str, end_name: str) -> bool:
     return start_name.endswith("_Ankle") and end_name.endswith("_Toe")
 
 
+def allows_leg_start_backtrack(segment: tuple[str, str]) -> bool:
+    return segment in LEG_START_BACKTRACK_SEGMENTS
+
+
 def apply_foot_planar_rule(
     snapshot: dict[str, Any],
     sample: dict[str, Any],
@@ -303,12 +318,13 @@ def evaluate(
     severity_segments: set[str] | None = None,
     *,
     foot_planar: bool = False,
+    segments: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     failures: list[dict[str, Any]] = []
     by_segment: dict[str, int] = {}
     by_segment_severity: dict[str, float] = {}
     total_severity = 0.0
-    for start, end in ORDERED_SEGMENTS:
+    for start, end in (segments or ORDERED_SEGMENTS):
         segment = f"{start}->{end}"
         count = 0
         severity = 0.0
@@ -407,10 +423,11 @@ def nearest_mesh_offset(snapshot: dict[str, Any], center: list[float], *, k: int
     mesh_points = snapshot.get("meshPoints", [])
     if not mesh_points:
         return [0.0, 0.0, 0.0]
-    nearest = sorted(
+    nearest = heapq.nsmallest(
+        max(1, min(k, len(mesh_points))),
         ((vec_length(vec_sub(point, center)), point) for point in mesh_points),
         key=lambda row: row[0],
-    )[: max(1, min(k, len(mesh_points)))]
+    )
     return [
         robust_center([float(point[axis]) - center[axis] for _, point in nearest])
         for axis in range(3)
@@ -505,17 +522,22 @@ def score_detail(
         for s, e in ORDERED_SEGMENTS
         if segments_share_node((s, e), active)
     ]
+    protected_locked = [segment for segment in locked if segments_share_node(segment, active)]
     severity_keys = {active_key}
-    severity_keys.update(f"{s}->{e}" for s, e in locked)
+    severity_keys.update(f"{s}->{e}" for s, e in protected_locked)
     severity_keys.update(f"{s}->{e}" for s, e in related_segments)
-    result = evaluate(snapshot, severity_keys)
-    locked_failures = sum(result["bySegment"].get(f"{s}->{e}", 0) for s, e in locked)
+    scored_segment_set = set(protected_locked)
+    scored_segment_set.update(related_segments)
+    scored_segment_set.add(active)
+    scored_segments = [segment for segment in ORDERED_SEGMENTS if segment in scored_segment_set]
+    result = evaluate(snapshot, severity_keys, segments=scored_segments)
+    locked_failures = sum(result["bySegment"].get(f"{s}->{e}", 0) for s, e in protected_locked)
     related_failures = sum(
         result["bySegment"].get(f"{s}->{e}", 0)
         for s, e in related_segments
     )
     active_failures = result["bySegment"].get(active_key, 0)
-    locked_severity = sum(result["bySegmentSeverity"].get(f"{s}->{e}", 0.0) for s, e in locked)
+    locked_severity = sum(result["bySegmentSeverity"].get(f"{s}->{e}", 0.0) for s, e in protected_locked)
     related_severity = sum(
         result["bySegmentSeverity"].get(f"{s}->{e}", 0.0)
         for s, e in related_segments
@@ -547,16 +569,16 @@ def chain_score_detail(
     chain_segments: list[tuple[str, str]],
 ) -> tuple[tuple[int, int, int], tuple[float, float, float]]:
     keys = {f"{start}->{end}" for start, end in chain_segments}
-    result = evaluate(snapshot, keys)
+    result = evaluate(snapshot, keys, segments=chain_segments)
     chain_failures = sum(result["bySegment"].get(key, 0) for key in keys)
-    global_failures = result["failureCount"]
-    outside_failures = global_failures - chain_failures
+    scored_failures = result["failureCount"]
+    outside_failures = scored_failures - chain_failures
     chain_severity = sum(result["bySegmentSeverity"].get(key, 0.0) for key in keys)
-    global_severity = float(result["severity"])
-    outside_severity = global_severity - chain_severity
+    scored_severity = float(result["severity"])
+    outside_severity = scored_severity - chain_severity
     return (
-        (chain_failures, outside_failures, global_failures),
-        (round(chain_severity, 6), round(outside_severity, 6), round(global_severity, 6)),
+        (chain_failures, outside_failures, scored_failures),
+        (round(chain_severity, 6), round(outside_severity, 6), round(scored_severity, 6)),
     )
 
 
@@ -821,8 +843,8 @@ def refine_segment(
                 update_snapshot_nodes(snapshot, trial_nodes)
                 trial_score, trial_severity = score_detail(snapshot, locked, segment)
                 update_snapshot_nodes(snapshot, original_nodes)
-                # Locked, adjacent, and global sections must not regress.
-                if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2, 3)):
+                # Locked and adjacent sections must not regress.
+                if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2)):
                     continue
                 if segment_score_better(trial_score, trial_severity, best_score, best_severity):
                     best_nodes = trial_nodes
@@ -839,7 +861,7 @@ def refine_segment(
                 update_snapshot_nodes(snapshot, trial_nodes)
                 trial_score, trial_severity = score_detail(snapshot, locked, segment)
                 update_snapshot_nodes(snapshot, original_nodes)
-                if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2, 3)):
+                if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2)):
                     continue
                 if segment_score_better(trial_score, trial_severity, best_score, best_severity):
                     best_nodes = trial_nodes
@@ -858,7 +880,7 @@ def refine_segment(
                     update_snapshot_nodes(snapshot, trial_nodes)
                     trial_score, trial_severity = score_detail(snapshot, locked, segment)
                     update_snapshot_nodes(snapshot, original_nodes)
-                    if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2, 3)):
+                    if protected_score_regressed(trial_score, current, trial_severity, current_severity, (1, 2)):
                         continue
                     if segment_score_better(trial_score, trial_severity, best_score, best_severity):
                         best_nodes = trial_nodes
@@ -880,13 +902,13 @@ def refine_segment(
                     "active": best_score[0],
                     "locked": best_score[1],
                     "related": best_score[2],
-                    "global": best_score[3],
+                    "scored": best_score[3],
                 },
                 "severity": {
                     "active": best_severity[0],
                     "locked": best_severity[1],
                     "related": best_severity[2],
-                    "global": best_severity[3],
+                    "scored": best_severity[3],
                 },
             }
         )
@@ -916,6 +938,7 @@ def run_probe(
     leg_chain_pass: bool,
     max_chain_iters: int,
     leg_chain_node_moves: bool,
+    leg_start_backtrack: bool,
 ) -> dict[str, Any]:
     height = snapshot_height(snapshot)
     max_step = max(height * max_step_ratio, 1.0)
@@ -923,14 +946,18 @@ def run_probe(
     locked: list[tuple[str, str]] = []
     segment_results: list[dict[str, Any]] = []
     for segment in ORDERED_SEGMENTS:
+        segment_start_backtrack = allow_start_backtrack or (
+            leg_start_backtrack and allows_leg_start_backtrack(segment)
+        )
         result = refine_segment(
             snapshot,
             segment,
             locked,
             max_segment_iters=max_segment_iters,
             max_step=max_step,
-            allow_start_backtrack=allow_start_backtrack,
+            allow_start_backtrack=segment_start_backtrack,
         )
+        result["allowStartBacktrack"] = segment_start_backtrack
         segment_results.append(result)
         if result["after"][0] == 0:
             locked.append(segment)
@@ -953,6 +980,7 @@ def run_probe(
         "mode": "ordered_agent_controlled_ct_probe",
         "maxSegmentIterations": max_segment_iters,
         "allowStartBacktrack": allow_start_backtrack,
+        "legStartBacktrack": leg_start_backtrack,
         "legChainPass": leg_chain_pass,
         "maxChainIterations": max_chain_iters,
         "legChainNodeMoves": leg_chain_node_moves,
@@ -967,6 +995,21 @@ def run_probe(
     }
 
 
+def final_result_better(candidate: dict[str, Any], current: dict[str, Any]) -> bool:
+    candidate_final = candidate["final"]
+    current_final = current["final"]
+    if candidate_final["failureCount"] < current_final["failureCount"]:
+        return True
+    if candidate_final["failureCount"] > current_final["failureCount"]:
+        return False
+    return float(candidate_final.get("severity", 0.0)) < float(current_final.get("severity", 0.0)) - 1e-4
+
+
+def should_probe_leg_start_backtrack(result: dict[str, Any], max_failures: int) -> bool:
+    failures = int(result["final"]["failureCount"])
+    return 1 < failures <= max_failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Probe ordered local CT refinement on a Stage01 visual snapshot.")
     parser.add_argument("snapshot_json")
@@ -974,6 +1017,9 @@ def main() -> int:
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--max-segment-iters", type=int, default=16)
     parser.add_argument("--allow-start-backtrack", action="store_true")
+    parser.add_argument("--leg-start-backtrack", action="store_true")
+    parser.add_argument("--best-of-leg-start-backtrack", action="store_true")
+    parser.add_argument("--best-of-leg-start-backtrack-max-failures", type=int, default=BEST_OF_LEG_START_BACKTRACK_MAX_FAILURES)
     parser.add_argument("--max-step-ratio", type=float, default=0.035)
     parser.add_argument("--leg-chain-pass", action="store_true")
     parser.add_argument("--max-chain-iters", type=int, default=6)
@@ -1006,16 +1052,73 @@ def main() -> int:
         PROBE_STATIONS = list(SLICE_SAMPLE_STATIONS)
     asset_name = args.asset_name or str(snapshot.get("assetName") or snapshot_path.stem)
 
-    working = copy.deepcopy(snapshot)
-    result = run_probe(
-        working,
-        args.max_segment_iters,
-        args.allow_start_backtrack,
-        args.max_step_ratio,
-        leg_chain_pass=args.leg_chain_pass,
-        max_chain_iters=args.max_chain_iters,
-        leg_chain_node_moves=args.leg_chain_node_moves,
-    )
+    if args.best_of_leg_start_backtrack:
+        default_working = copy.deepcopy(snapshot)
+        default_result = run_probe(
+            default_working,
+            args.max_segment_iters,
+            args.allow_start_backtrack,
+            args.max_step_ratio,
+            leg_chain_pass=args.leg_chain_pass,
+            max_chain_iters=args.max_chain_iters,
+            leg_chain_node_moves=args.leg_chain_node_moves,
+            leg_start_backtrack=False,
+        )
+        probe_leg_backtrack = should_probe_leg_start_backtrack(
+            default_result,
+            args.best_of_leg_start_backtrack_max_failures,
+        )
+        leg_result = None
+        if probe_leg_backtrack:
+            leg_working = copy.deepcopy(snapshot)
+            leg_result = run_probe(
+                leg_working,
+                args.max_segment_iters,
+                args.allow_start_backtrack,
+                args.max_step_ratio,
+                leg_chain_pass=args.leg_chain_pass,
+                max_chain_iters=args.max_chain_iters,
+                leg_chain_node_moves=args.leg_chain_node_moves,
+                leg_start_backtrack=True,
+            )
+        if leg_result is not None and final_result_better(leg_result, default_result):
+            working = leg_working
+            result = leg_result
+            result["bestOfLegStartBacktrackChoice"] = "leg_start_backtrack"
+        else:
+            working = default_working
+            result = default_result
+            result["bestOfLegStartBacktrackChoice"] = "default"
+        result["bestOfLegStartBacktrack"] = True
+        result["bestOfLegStartBacktrackProbed"] = probe_leg_backtrack
+        result["bestOfLegStartBacktrackMaxFailures"] = args.best_of_leg_start_backtrack_max_failures
+        result["bestOfLegStartBacktrackCandidates"] = {
+            "default": {
+                "finalFailures": default_result["final"]["failureCount"],
+                "finalSeverity": default_result["final"]["severity"],
+                "finalRoleAwareFailures": default_result["finalRoleAware"]["failureCount"],
+            },
+        }
+        if leg_result is not None:
+            result["bestOfLegStartBacktrackCandidates"]["legStartBacktrack"] = {
+                "finalFailures": leg_result["final"]["failureCount"],
+                "finalSeverity": leg_result["final"]["severity"],
+                "finalRoleAwareFailures": leg_result["finalRoleAware"]["failureCount"],
+            }
+    else:
+        working = copy.deepcopy(snapshot)
+        result = run_probe(
+            working,
+            args.max_segment_iters,
+            args.allow_start_backtrack,
+            args.max_step_ratio,
+            leg_chain_pass=args.leg_chain_pass,
+            max_chain_iters=args.max_chain_iters,
+            leg_chain_node_moves=args.leg_chain_node_moves,
+            leg_start_backtrack=args.leg_start_backtrack,
+        )
+        result["bestOfLegStartBacktrack"] = False
+        result["bestOfLegStartBacktrackProbed"] = False
     update_snapshot_nodes(working, node_positions(working))
 
     write_json(out_dir / f"{asset_name}_ordered_ct_probe.json", result)
@@ -1034,9 +1137,12 @@ def main() -> int:
         f"- Final role-aware CT failures: `{result['finalRoleAware']['failureCount']}`",
         f"- Locked green segments: `{len(result['lockedSegments'])}` / `{len(ORDERED_SEGMENTS)}`",
         f"- Floor clamp: `{result['floorClamp']}`",
+        f"- Leg start backtrack: `{result['legStartBacktrack']}`",
+        f"- Best-of leg start backtrack: `{result['bestOfLegStartBacktrack']}`",
+        f"- Best-of leg branch probed: `{result['bestOfLegStartBacktrackProbed']}`",
         f"- Max local step: `{result['maxStep']}`",
         "",
-        "| Segment | Before active/locked/related/global | After active/locked/related/global | Moves | Stop |",
+        "| Segment | Before active/locked/related/scored | After active/locked/related/scored | Moves | Stop |",
         "| --- | --- | --- | ---: | --- |",
     ]
     for item in result["segments"]:
@@ -1051,7 +1157,7 @@ def main() -> int:
         )
     if result["chains"]:
         md_lines += ["", "## Leg Chain Pass", ""]
-        md_lines.append("| Chain | Before chain/outside/global | After chain/outside/global | Moves | Stop |")
+        md_lines.append("| Chain | Before chain/outside/scored | After chain/outside/scored | Moves | Stop |")
         md_lines.append("| --- | --- | --- | ---: | --- |")
         for item in result["chains"]:
             md_lines.append(

@@ -71,6 +71,7 @@ LEG_CHAINS: list[dict[str, Any]] = [
 ]
 
 PROBE_STATIONS = list(SLICE_SAMPLE_STATIONS)
+FLOOR_CLAMP = True
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -130,7 +131,31 @@ def node_positions(snapshot: dict[str, Any]) -> dict[str, list[float]]:
     return {str(name): [float(v) for v in value] for name, value in nodes.items()}
 
 
+def node_floor_z(snapshot: dict[str, Any], node_name: str) -> float | None:
+    bounds = snapshot.get("bounds", {})
+    min_z = float(bounds.get("min", [0.0, 0.0, 0.0])[2])
+    height = snapshot_height(snapshot)
+    if node_name.endswith("_Toe") or node_name.endswith("_Foot") or node_name.endswith("_Heel"):
+        return min_z + height * 0.015
+    if node_name.endswith("_Ankle"):
+        return min_z + height * 0.025
+    if node_name.endswith("_Knee"):
+        return min_z + height * 0.075
+    return None
+
+
+def clamp_nodes_to_body_floor(snapshot: dict[str, Any], nodes: dict[str, list[float]]) -> dict[str, list[float]]:
+    clamped = clone_nodes(nodes)
+    for name, value in clamped.items():
+        floor_z = node_floor_z(snapshot, name)
+        if floor_z is not None and value[2] < floor_z:
+            value[2] = floor_z
+    return clamped
+
+
 def update_snapshot_nodes(snapshot: dict[str, Any], nodes: dict[str, list[float]]) -> None:
+    if FLOOR_CLAMP:
+        nodes = clamp_nodes_to_body_floor(snapshot, nodes)
     snapshot["bipedNodes"] = {name: [round(v, 6) for v in value] for name, value in nodes.items()}
     for bone in snapshot.get("bipedBones", []):
         start = str(bone.get("start", ""))
@@ -931,6 +956,7 @@ def run_probe(
         "legChainPass": leg_chain_pass,
         "maxChainIterations": max_chain_iters,
         "legChainNodeMoves": leg_chain_node_moves,
+        "floorClamp": FLOOR_CLAMP,
         "maxStep": round(max_step, 6),
         "initial": initial,
         "final": final,
@@ -952,6 +978,8 @@ def main() -> int:
     parser.add_argument("--leg-chain-pass", action="store_true")
     parser.add_argument("--max-chain-iters", type=int, default=6)
     parser.add_argument("--leg-chain-node-moves", action="store_true")
+    parser.add_argument("--floor-clamp", dest="floor_clamp", action="store_true", default=True)
+    parser.add_argument("--no-floor-clamp", dest="floor_clamp", action="store_false")
     parser.add_argument(
         "--station-mode",
         choices=["standard", "dense"],
@@ -970,6 +998,8 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     snapshot = load_json(snapshot_path)
     global PROBE_STATIONS
+    global FLOOR_CLAMP
+    FLOOR_CLAMP = bool(args.floor_clamp)
     if args.station_mode == "dense":
         PROBE_STATIONS = [0.0, 0.125, 0.25, 0.375, 0.50, 0.625, 0.75, 0.875, 1.0]
     else:
@@ -1003,6 +1033,7 @@ def main() -> int:
         f"- Final strict CT failures: `{result['final']['failureCount']}`",
         f"- Final role-aware CT failures: `{result['finalRoleAware']['failureCount']}`",
         f"- Locked green segments: `{len(result['lockedSegments'])}` / `{len(ORDERED_SEGMENTS)}`",
+        f"- Floor clamp: `{result['floorClamp']}`",
         f"- Max local step: `{result['maxStep']}`",
         "",
         "| Segment | Before active/locked/related/global | After active/locked/related/global | Moves | Stop |",

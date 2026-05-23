@@ -1680,6 +1680,35 @@ struct AIRAStage01Tool
         if len > maxStep and len > 0.0001 then (vec * (maxStep / len)) else vec
     ),
 
+    fn ctPointCloudMinZ pts =
+    (
+        local minZ = 1e9
+        if pts != undefined do
+        (
+            for p in pts do
+            (
+                if p.z < minZ do minZ = p.z
+            )
+        )
+        if minZ == 1e9 then 0.0 else minZ
+    ),
+
+    fn ctGuideFloorZ guideName h minZ =
+    (
+        if ((matchPattern guideName pattern:"*Toe" ignoreCase:true) or \
+            (matchPattern guideName pattern:"*Foot" ignoreCase:true) or \
+            (matchPattern guideName pattern:"*Heel" ignoreCase:true)) then minZ + (h * 0.015)
+        else if (matchPattern guideName pattern:"*Ankle" ignoreCase:true) then minZ + (h * 0.025)
+        else if (matchPattern guideName pattern:"*Knee" ignoreCase:true) then minZ + (h * 0.075)
+        else undefined
+    ),
+
+    fn ctClampGuideTargetPosition guideName targetPos h minZ =
+    (
+        local floorZ = ctGuideFloorZ guideName h minZ
+        if floorZ != undefined and targetPos.z < floorZ then [targetPos.x, targetPos.y, floorZ] else targetPos
+    ),
+
     fn ctRefineSegment bipRoot seg pts h =
     (
         local startNode = bipedNodeForGuide bipRoot seg[1]
@@ -1711,6 +1740,7 @@ struct AIRAStage01Tool
                 local maxOffset = 0.0
                 local tolerance = h * ctWrapToleranceRatio
                 local maxStep = h * ctWrapMaxStepRatio
+                local minZ = ctPointCloudMinZ pts
                 if (segLen * 0.35) < maxStep do maxStep = segLen * 0.35
                 local stations = ctSampleStations()
 
@@ -1746,13 +1776,15 @@ struct AIRAStage01Tool
                 (
                     local move = (startAccum * (1.0 / startWeight)) * ctWrapDamping
                     move = clampVectorStep move maxStep
-                    if setBipedNodePosition startNode (startPos + move) do moved += 1
+                    local startTargetPos = ctClampGuideTargetPosition seg[1] (startPos + move) h minZ
+                    if setBipedNodePosition startNode startTargetPos do moved += 1
                 )
                 if endWeight > 0.0 do
                 (
                     local move = (endAccum * (1.0 / endWeight)) * ctWrapDamping
                     move = clampVectorStep move maxStep
-                    if setBipedNodePosition endNode (endPos + move) do moved += 1
+                    local endTargetPos = ctClampGuideTargetPosition seg[2] (endPos + move) h minZ
+                    if setBipedNodePosition endNode endTargetPos do moved += 1
                 )
                 #(moved, correctedSamples, maxOffset)
             )
@@ -1898,6 +1930,7 @@ struct AIRAStage01Tool
                 local maxOffset = 0.0
                 local tolerance = h * ctWrapToleranceRatio
                 local maxStep = h * ctWrapMaxStepRatio
+                local minZ = ctPointCloudMinZ pts
                 if (segLen * 0.35) < maxStep do maxStep = segLen * 0.35
                 local stations = ctSampleStations()
 
@@ -1923,7 +1956,8 @@ struct AIRAStage01Tool
                 (
                     local move = (endAccum * (1.0 / endWeight)) * ctWrapDamping
                     move = clampVectorStep move maxStep
-                    if setBipedNodePosition endNode (endPos + move) do moved += 1
+                    local endTargetPos = ctClampGuideTargetPosition seg[2] (endPos + move) h minZ
+                    if setBipedNodePosition endNode endTargetPos do moved += 1
                 )
                 #(moved, correctedSamples, maxOffset)
             )
@@ -2110,6 +2144,7 @@ struct AIRAStage01Tool
         local acceptedMoves = 0
         local iterations = 0
         local stopReason = if currentScore[1] == 0 then "already_green" else "no_positive_candidate"
+        local minZ = ctPointCloudMinZ pts
 
         for localIter = 1 to maxSegmentIterations while currentScore[1] > 0 do
         (
@@ -2127,7 +2162,8 @@ struct AIRAStage01Tool
                 (
                     for move in (ctCandidateMovesForNode bipRoot seg guideName pts h maxStep) do
                     (
-                        if setBipedNodePosition node (oldPos + move) do
+                        local nodeTargetPos = ctClampGuideTargetPosition guideName (oldPos + move) h minZ
+                        if setBipedNodePosition node nodeTargetPos do
                         (
                             local trialScore = ctScoreSegment bipRoot seg lockedSegments pts h
                             local lockedOkSingle = (trialScore[2] < currentScore[2]) or (trialScore[2] == currentScore[2] and trialScore[7] <= (currentScore[7] + 0.0001))
@@ -2152,7 +2188,9 @@ struct AIRAStage01Tool
                 (
                     for move in (ctCandidateTranslationMovesForSegment bipRoot seg pts h maxStep) do
                     (
-                        if (setBipedNodePosition startNode (startOldPos + move)) and (setBipedNodePosition endNode (endOldPos + move)) do
+                        local startTargetPos = ctClampGuideTargetPosition seg[1] (startOldPos + move) h minZ
+                        local endTargetPos = ctClampGuideTargetPosition seg[2] (endOldPos + move) h minZ
+                        if (setBipedNodePosition startNode startTargetPos) and (setBipedNodePosition endNode endTargetPos) do
                         (
                             local trialScore = ctScoreSegment bipRoot seg lockedSegments pts h
                             local lockedOkPair = (trialScore[2] < currentScore[2]) or (trialScore[2] == currentScore[2] and trialScore[7] <= (currentScore[7] + 0.0001))
@@ -2180,7 +2218,8 @@ struct AIRAStage01Tool
                     (
                         for move in (ctAxisFallbackMoves maxStep) do
                         (
-                            if setBipedNodePosition node (oldPos + move) do
+                            local axisTargetPos = ctClampGuideTargetPosition guideName (oldPos + move) h minZ
+                            if setBipedNodePosition node axisTargetPos do
                             (
                                 local trialScore = ctScoreSegment bipRoot seg lockedSegments pts h
                                 local lockedOkAxis = (trialScore[2] < currentScore[2]) or (trialScore[2] == currentScore[2] and trialScore[7] <= (currentScore[7] + 0.0001))
@@ -2210,7 +2249,11 @@ struct AIRAStage01Tool
                 (
                     local bestNode = bipedNodeForGuide bipRoot guideName
                     local bestOldPos = if bestNode != undefined then getBipedNodePosition bestNode else undefined
-                    if bestOldPos != undefined and setBipedNodePosition bestNode (bestOldPos + bestMove) do applied += 1
+                    if bestOldPos != undefined do
+                    (
+                        local applyTargetPos = ctClampGuideTargetPosition guideName (bestOldPos + bestMove) h minZ
+                        if setBipedNodePosition bestNode applyTargetPos do applied += 1
+                    )
                 )
                 if applied == 0 then
                 (

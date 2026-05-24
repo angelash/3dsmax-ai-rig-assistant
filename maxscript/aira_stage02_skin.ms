@@ -588,6 +588,7 @@ struct AIRAStage02SkinTool
         else if matchPattern n pattern:"*CC_Base_Waist*" ignoreCase:true then "Spine"
         else if matchPattern n pattern:"*CC_Base_Spine*" ignoreCase:true then "Chest"
         else if matchPattern n pattern:"*CC_Base_Ribs*" ignoreCase:true then "Chest"
+        else if matchPattern n pattern:"*CC_Base_*_Ribs*" ignoreCase:true then "Chest"
         else if matchPattern n pattern:"*CC_Base_*_Breast*" ignoreCase:true then "Chest"
         else if matchPattern n pattern:"*CC_Base_Neck*" ignoreCase:true then "Neck"
         else if matchPattern n pattern:"*CC_Base_Head*" ignoreCase:true then "Head"

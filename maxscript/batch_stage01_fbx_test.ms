@@ -1,12 +1,10 @@
 /*
 Batch test for AIRA Stage01 with one FBX file.
 
-Default target:
-F:\workspace\github\3dsmax-ai-rig-assistant\source\luxun_model\陆逊模型.fbx
+Default target comes from AIRA_STAGE01_FBX_PATH or config/sourceRoot.
 
 Run:
-"D:\Program files\Autodesk\3ds Max 2020\3dsmaxbatch.exe" ^
-  "F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\batch_stage01_fbx_test.ms" -v 4
+server\batch_stage01_fbx.ps1 -SourceFbx "<path-to-model.fbx>" -AssetName "<asset-name>"
 */
 
 global AIRA_STAGE01_HEADLESS = true
@@ -456,14 +454,17 @@ fn safeImportFbx fbxPath =
 
 fn main =
 (
-    local outDir = getEnv "AIRA_STAGE01_OUT_DIR" @"F:\workspace\github\3dsmax-ai-rig-assistant\out"
-    local asciiFbxPath = @"F:\workspace\github\3dsmax-ai-rig-assistant\out\luxun_model.fbx"
-    local fbxPath = getEnv "AIRA_STAGE01_FBX_PATH" (if doesFileExist asciiFbxPath then asciiFbxPath else @"F:\workspace\github\3dsmax-ai-rig-assistant\source\luxun_model\陆逊模型.fbx")
+    local toolRoot = getEnv "AIRA_TOOL_ROOT" "."
+    local outDir = getEnv "AIRA_STAGE01_OUT_DIR" (getEnv "AIRA_OUT_DIR" (joinPath toolRoot "out"))
+    local sourceRoot = getEnv "AIRA_SOURCE_ROOT" (joinPath toolRoot "source")
+    local asciiFbxPath = joinPath outDir "luxun_model.fbx"
+    local fallbackFbxPath = joinPath sourceRoot @"luxun_model\陆逊模型.fbx"
+    local fbxPath = getEnv "AIRA_STAGE01_FBX_PATH" (if doesFileExist asciiFbxPath then asciiFbxPath else fallbackFbxPath)
     local assetName = getEnv "AIRA_STAGE01_ASSET_NAME" (getFilenameFile fbxPath)
     local guideAlgorithm = getEnv "AIRA_STAGE01_GUIDE_ALGO" "tutorial_centerline_qbird"
     local maxFitIterations = (getEnv "AIRA_STAGE01_MAX_FIT_ITERATIONS" "18") as integer
-    local toolPath = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_stage01_biped.ms"
-    local assetQcPath = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_asset_qc.ms"
+    local toolPath = joinPath (joinPath toolRoot "maxscript") "aira_stage01_biped.ms"
+    local assetQcPath = joinPath (joinPath toolRoot "maxscript") "aira_asset_qc.ms"
     local reportPath = outDir + @"\" + assetName + @"_stage01_batch_summary.md"
     local scenePath = outDir + @"\" + assetName + @"_stage01_rig_scene.max"
 

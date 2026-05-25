@@ -11,7 +11,7 @@ Stage02 对应教程第三、四篇：
 
 脚本位置：
 
-`F:/workspace/github/3dsmax-ai-rig-assistant/maxscript/aira_stage02_skin.ms`
+`maxscript/aira_stage02_skin.ms`
 
 功能：
 
@@ -31,10 +31,11 @@ Stage02 对应教程第三、四篇：
 推荐从 Stage01 产出的 `.max` 场景继续：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage02_skin.ps1 `
-  -SourceMax "F:\workspace\github\3dsmax-ai-rig-assistant\out\runs\luxun_model__YYYYMMDD_HHMMSS\scene\luxun_model_stage01_rig_scene.max" `
+$repo = (Resolve-Path .).Path
+& "$repo\server\batch_stage02_skin.ps1" `
+  -SourceMax "$repo\out\runs\luxun_model__YYYYMMDD_HHMMSS\scene\luxun_model_stage01_rig_scene.max" `
   -AssetName luxun_model `
-  -Stage01SkinPrepGateJson "F:\workspace\github\3dsmax-ai-rig-assistant\out\runs\luxun_model__YYYYMMDD_HHMMSS\data\luxun_model_stage01_skin_prep_gate.json"
+  -Stage01SkinPrepGateJson "$repo\out\runs\luxun_model__YYYYMMDD_HHMMSS\data\luxun_model_stage01_skin_prep_gate.json"
 ```
 
 默认要求 `Stage01SkinPrepGateJson.skinSetupReady=true`。如果只是研究第一版自动权重，可以显式加：
@@ -48,11 +49,12 @@ F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage02_skin.ps1 `
 如果同一拓扑有参考答案 FBX，可以把参考 Skin 权重作为初始蒙皮来源：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage02_skin.ps1 `
-  -SourceMax "F:\workspace\github\3dsmax-ai-rig-assistant\out\runs\luxun_model__YYYYMMDD_HHMMSS\scene\luxun_model_stage01_rig_scene.max" `
+$repo = (Resolve-Path .).Path
+& "$repo\server\batch_stage02_skin.ps1" `
+  -SourceMax "$repo\out\runs\luxun_model__YYYYMMDD_HHMMSS\scene\luxun_model_stage01_rig_scene.max" `
   -AssetName luxun_model `
-  -Stage01SkinPrepGateJson "F:\workspace\github\3dsmax-ai-rig-assistant\out\runs\luxun_model__YYYYMMDD_HHMMSS\data\luxun_model_stage01_skin_prep_gate.json" `
-  -ReferenceFbx "F:\workspace\github\3dsmax-ai-rig-assistant\source\A1角色\陆逊\陆逊绑定骨骼模型.fbx"
+  -Stage01SkinPrepGateJson "$repo\out\runs\luxun_model__YYYYMMDD_HHMMSS\data\luxun_model_stage01_skin_prep_gate.json" `
+  -ReferenceFbx "$repo\source\A1角色\陆逊\陆逊绑定骨骼模型.fbx"
 ```
 
 `-ReferenceFbx` 不会复制参考答案的 70 根细骨，也不会改 Stage01 Biped。它只读取参考 Skin 的逐顶点权重，把 AccuRig/CC_Base 的 twist、share、face、toe 等细分骨合并到当前 21 个游戏用 Biped 语义骨上；没有映射到的顶点才回退到 Biped 段距离规则。
@@ -60,8 +62,9 @@ F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage02_skin.ps1 `
 生成 Skin 后可以再跑独立动作变形 smoke test：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage02_deform_test.ps1 `
-  -SourceMax "F:\workspace\github\3dsmax-ai-rig-assistant\out\stage02_runs\luxun_model__YYYYMMDD_HHMMSS_refcollapse\scene\luxun_model_stage02_skin_scene.max" `
+$repo = (Resolve-Path .).Path
+& "$repo\server\batch_stage02_deform_test.ps1" `
+  -SourceMax "$repo\out\stage02_runs\luxun_model__YYYYMMDD_HHMMSS_refcollapse\scene\luxun_model_stage02_skin_scene.max" `
   -AssetName luxun_model_refcollapse
 ```
 

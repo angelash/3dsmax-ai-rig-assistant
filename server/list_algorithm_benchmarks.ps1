@@ -10,10 +10,12 @@ if (-not $LegacyScoringResearchOnly) {
     throw "Legacy benchmark history scoring is disabled for production. Pass -LegacyScoringResearchOnly only when deliberately inspecting old experiments; do not use these scores for rig decisions."
 }
 
-$RepoRoot = "F:\workspace\open-share"
-$ToolRoot = "F:\workspace\github\3dsmax-ai-rig-assistant"
+. (Join-Path $PSScriptRoot "aira_config.ps1")
+
+$AiraConfig = Set-AiraProcessEnvironmentFromConfig
+$ToolRoot = $AiraConfig.toolRoot
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
-    $OutDir = Join-Path $ToolRoot "out"
+    $OutDir = Get-AiraOutDir
 }
 
 $HistoryDir = Join-Path $OutDir "algorithm_benchmarks"

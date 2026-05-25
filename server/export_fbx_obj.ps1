@@ -4,15 +4,23 @@ param(
 
     [string]$AssetName = "",
 
-    [string]$OutDir = ""
+    [string]$OutDir = "",
+
+    [string]$MaxBatch = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-$RepoRoot = "F:\workspace\open-share"
-$ToolRoot = "F:\workspace\github\3dsmax-ai-rig-assistant"
+. (Join-Path $PSScriptRoot "aira_config.ps1")
+
+$AiraConfig = Set-AiraProcessEnvironmentFromConfig
+$ToolRoot = $AiraConfig.toolRoot
 $BatchScript = Join-Path $ToolRoot "maxscript\batch_export_fbx_obj.ms"
-$MaxBatch = "D:\Program files\Autodesk\3ds Max 2020\3dsmaxbatch.exe"
+$MaxBatch = Get-AiraMaxBatch $MaxBatch
+
+if (-not (Test-Path -LiteralPath $MaxBatch -PathType Leaf)) {
+    throw "3dsmaxbatch.exe not found: $MaxBatch. Run server\setup_local.ps1 or set AIRA_MAXBATCH."
+}
 
 if (-not (Test-Path -LiteralPath $SourceFbx)) {
     throw "FBX file not found: $SourceFbx"
@@ -24,7 +32,7 @@ if ([string]::IsNullOrWhiteSpace($AssetName)) {
 
 $SafeAssetName = ($AssetName -replace '[\\/:*?"<>|]', '_')
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
-    $OutDir = Join-Path $ToolRoot "out"
+    $OutDir = Get-AiraOutDir
 }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -33,10 +41,12 @@ Copy-Item -LiteralPath $SourceFbx -Destination $WorkingFbx -Force
 
 $oldFbxPath = [Environment]::GetEnvironmentVariable("AIRA_EXPORT_FBX_PATH", "Process")
 $oldAssetName = [Environment]::GetEnvironmentVariable("AIRA_EXPORT_ASSET_NAME", "Process")
+$oldOutDir = [Environment]::GetEnvironmentVariable("AIRA_EXPORT_OUT_DIR", "Process")
 
 try {
     $env:AIRA_EXPORT_FBX_PATH = $WorkingFbx
     $env:AIRA_EXPORT_ASSET_NAME = $SafeAssetName
+    $env:AIRA_EXPORT_OUT_DIR = $OutDir
 
     & $MaxBatch $BatchScript `
         -v 4 `
@@ -56,6 +66,13 @@ finally {
     }
     else {
         $env:AIRA_EXPORT_ASSET_NAME = $oldAssetName
+    }
+
+    if ($null -eq $oldOutDir) {
+        Remove-Item Env:AIRA_EXPORT_OUT_DIR -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:AIRA_EXPORT_OUT_DIR = $oldOutDir
     }
 }
 

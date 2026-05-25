@@ -9,14 +9,26 @@
 
 MCP server 不直接执行任意 MaxScript，只能调用桥接脚本暴露的白名单命令。
 
-## 1. 安装 Python 依赖
+## 1. 本机自配置
 
-建议使用工具目录里的隔离虚拟环境，避免影响全局 Python：
+每台电脑首次同步仓库后，先在仓库根目录运行：
 
 ```powershell
-python -m venv F:\workspace\github\3dsmax-ai-rig-assistant\.venv
-F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe -m pip install -r F:\workspace\github\3dsmax-ai-rig-assistant\requirements.txt
+.\server\setup_local.ps1
 ```
+
+它会创建/使用 `.venv`、安装基础依赖、探测 `3dsmaxbatch.exe`，并生成不提交的本机配置：
+
+- `config/local.json`
+- `config/mcp.local.json`
+
+只生成配置、不安装依赖：
+
+```powershell
+.\server\setup_local.ps1 -SkipVenv -SkipInstall
+```
+
+配置读取优先级是：命令行参数 > `AIRA_*` 环境变量 > `config/local.json` > 自动推导默认值。
 
 ## 2. 在 3ds Max 内启动桥接脚本
 
@@ -29,7 +41,7 @@ Scripting > Run Script...
 选择：
 
 ```text
-F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_mcp_bridge.ms
+<repo>\maxscript\aira_mcp_bridge.ms
 ```
 
 成功后会看到一个小窗口：
@@ -45,23 +57,23 @@ Bridge running.
 在 PowerShell 里执行：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspace\github\3dsmax-ai-rig-assistant\server\direct_cli.py ping
+.\server\doctor.ps1 -CheckBridge
 ```
 
-如果返回 `ok: true`，说明 Python 已经能和 3ds Max 通信。
+如果 `checks` 里的 `3dsmax_bridge` 为 `ok`，说明 Python 已经能和 3ds Max 通信；如果是 `warning`，通常是 3ds Max 里的桥接脚本还没启动。
 
 ## 4. 运行第一篇全自动粗流程
 
 先在 3ds Max 里选中角色模型，然后执行：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspace\github\3dsmax-ai-rig-assistant\server\direct_cli.py stage01_auto_pipeline
+.\server\stage01_auto.ps1
 ```
 
-也可以直接运行封装好的脚本：
+也可以直接调直连 CLI：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\stage01_auto.ps1
+.\.venv\Scripts\python.exe .\server\direct_cli.py stage01_auto_pipeline
 ```
 
 它会自动执行：
@@ -79,53 +91,38 @@ F:\workspace\github\3dsmax-ai-rig-assistant\server\stage01_auto.ps1
 检测当前 3ds Max 场景：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspace\github\3dsmax-ai-rig-assistant\server\direct_cli.py asset_qc_current_scene
+.\.venv\Scripts\python.exe .\server\direct_cli.py asset_qc_current_scene
 ```
 
 离线检测一个 FBX：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_qc_fbx.ps1 -SourceFbx "F:\workspace\github\3dsmax-ai-rig-assistant\source\luxun_model\陆逊模型.fbx" -AssetName luxun_model
+$repo = (Resolve-Path .).Path
+& "$repo\server\batch_qc_fbx.ps1" -SourceFbx "$repo\source\luxun_model\陆逊模型.fbx" -AssetName luxun_model
 ```
 
 输出目录：
 
 ```text
-F:/workspace/github/3dsmax-ai-rig-assistant/out/
+out/
 ```
 
 报告包括几何、三角面、材质贴图、包围盒、缩放、骨骼、Skin、权重影响数和问题列表。
 
 ## 6. 接入 MCP 客户端
 
-示例配置：
-
-```json
-{
-  "mcpServers": {
-    "3dsmax-ai-rig-assistant": {
-      "command": "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\.venv\\Scripts\\python.exe",
-      "args": [
-        "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\server\\mcp_server.py"
-      ],
-      "env": {}
-    }
-  }
-}
-```
-
-同样的配置已放在：
+优先使用自配置生成的本机配置：
 
 ```text
-F:/workspace/github/3dsmax-ai-rig-assistant/config/mcp.example.json
+config/mcp.local.json
 ```
 
-如果使用 Cursor，可以参考 `.cursor/mcp.json`。
+通用模板在 `config/mcp.example.json`，里面的 `C:\path\to\...` 需要替换成本机路径。`mcp.local.json` 已经包含本机 `AIRA_TOOL_ROOT`、`AIRA_OUT_DIR`、`AIRA_SOURCE_ROOT`、`AIRA_MAXBATCH`、`AIRA_MCP_HOST` 和 `AIRA_MCP_PORT`。
 
 手动启动 MCP server 时也可以执行：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\run_mcp_server.ps1
+.\server\run_mcp_server.ps1
 ```
 
 ## 7. 当前 MCP 工具
@@ -170,20 +167,21 @@ Biped 机械拟合不是单次写入。离线流程会按 Fit QC 偏差循环调
 旧 benchmark 曾写入：
 
 ```text
-F:/workspace/github/3dsmax-ai-rig-assistant/out/algorithm_benchmarks/<RunId>/run_manifest.json
+out/algorithm_benchmarks/<RunId>/run_manifest.json
 ```
 
 旧 benchmark 归档如需研究性回看，必须显式声明这是历史评分，不允许用于生产判断：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\list_algorithm_benchmarks.ps1 -LegacyScoringResearchOnly
+.\server\list_algorithm_benchmarks.ps1 -LegacyScoringResearchOnly
 ```
 
 几何骨架探测：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\export_fbx_obj.ps1 -SourceFbx "F:\workspace\github\3dsmax-ai-rig-assistant\source\luxun_model\陆逊模型.fbx" -AssetName luxun_model_external
-F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspace\github\3dsmax-ai-rig-assistant\server\skeletor_probe.py F:\workspace\github\3dsmax-ai-rig-assistant\out\luxun_model_external.obj --asset-name luxun_model_external
+$repo = (Resolve-Path .).Path
+& "$repo\server\export_fbx_obj.ps1" -SourceFbx "$repo\source\luxun_model\陆逊模型.fbx" -AssetName luxun_model_external
+& "$repo\.venv\Scripts\python.exe" "$repo\server\skeletor_probe.py" "$repo\out\luxun_model_external.obj" --asset-name luxun_model_external
 ```
 
 ## 8. 安全边界

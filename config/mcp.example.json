@@ -1,11 +1,18 @@
 {
   "mcpServers": {
     "3dsmax-ai-rig-assistant": {
-      "command": "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\3dsmax-ai-rig-assistant\\.venv\\Scripts\\python.exe",
       "args": [
-        "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\server\\mcp_server.py"
+        "C:\\path\\to\\3dsmax-ai-rig-assistant\\server\\mcp_server.py"
       ],
-      "env": {}
+      "env": {
+        "AIRA_TOOL_ROOT": "C:\\path\\to\\3dsmax-ai-rig-assistant",
+        "AIRA_OUT_DIR": "C:\\path\\to\\3dsmax-ai-rig-assistant\\out",
+        "AIRA_SOURCE_ROOT": "C:\\path\\to\\3dsmax-ai-rig-assistant\\source",
+        "AIRA_MAXBATCH": "C:\\Program Files\\Autodesk\\3ds Max 2020\\3dsmaxbatch.exe",
+        "AIRA_MCP_HOST": "127.0.0.1",
+        "AIRA_MCP_PORT": "37820"
+      }
     }
   }
 }

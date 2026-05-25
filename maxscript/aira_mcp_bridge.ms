@@ -15,14 +15,56 @@ global AIRA_Stage01
 global AIRA_Stage02
 global AIRA_AssetQC
 
+fn AIRA_bridgeGetEnv key defaultValue =
+(
+    local value = (dotNetClass "System.Environment").GetEnvironmentVariable key
+    if value == undefined or value == "" then defaultValue else value
+)
+
+fn AIRA_bridgeJoinPath dir fileName =
+(
+    local d = dir as string
+    if d == "" then fileName
+    else
+    (
+        local lastChar = substring d d.count 1
+        if lastChar == "\\" or lastChar == "/" then d + fileName else d + "\\" + fileName
+    )
+)
+
+fn AIRA_bridgeParentDir path =
+(
+    local di = dotNetObject "System.IO.DirectoryInfo" path
+    di.Parent.FullName
+)
+
+fn AIRA_bridgeScriptRoot =
+(
+    local sourceFile = ""
+    try(sourceFile = getSourceFileName())catch(sourceFile = "")
+    if sourceFile != undefined and sourceFile != "" then getFilenamePath sourceFile else ""
+)
+
+fn AIRA_bridgeToolRoot =
+(
+    local envRoot = AIRA_bridgeGetEnv "AIRA_TOOL_ROOT" ""
+    if envRoot != "" then envRoot
+    else
+    (
+        local scriptRoot = AIRA_bridgeScriptRoot()
+        if scriptRoot != "" then AIRA_bridgeParentDir scriptRoot else "."
+    )
+)
+
 struct AIRAMCPBridge
 (
-    host = "127.0.0.1",
-    port = 37820,
+    host = AIRA_bridgeGetEnv "AIRA_MCP_HOST" "127.0.0.1",
+    port = (AIRA_bridgeGetEnv "AIRA_MCP_PORT" "37820") as integer,
     listener = undefined,
-    stage01Path = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_stage01_biped.ms",
-    stage02Path = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_stage02_skin.ms",
-    assetQcPath = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_asset_qc.ms",
+    toolRoot = AIRA_bridgeToolRoot(),
+    stage01Path = "",
+    stage02Path = "",
+    assetQcPath = "",
 
     fn log msg =
     (
@@ -47,6 +89,18 @@ struct AIRAMCPBridge
         ",\"message\":\"" + jsonEscape message + "\"" + \
         ",\"result\":\"" + jsonEscape result + "\"" + \
         "}"
+    ),
+
+    fn applyConfig =
+    (
+        host = AIRA_bridgeGetEnv "AIRA_MCP_HOST" host
+        port = (AIRA_bridgeGetEnv "AIRA_MCP_PORT" (port as string)) as integer
+        toolRoot = AIRA_bridgeToolRoot()
+        local maxscriptDir = AIRA_bridgeJoinPath toolRoot "maxscript"
+        stage01Path = AIRA_bridgeJoinPath maxscriptDir "aira_stage01_biped.ms"
+        stage02Path = AIRA_bridgeJoinPath maxscriptDir "aira_stage02_skin.ms"
+        assetQcPath = AIRA_bridgeJoinPath maxscriptDir "aira_asset_qc.ms"
+        true
     ),
 
     fn ensureStage01Loaded =
@@ -315,15 +369,18 @@ try(destroyDialog AIRA_MCP_Bridge_UI)catch()
 try(if AIRA_MCP_Bridge != undefined do AIRA_MCP_Bridge.stopListener())catch()
 
 AIRA_MCP_Bridge = AIRAMCPBridge()
+AIRA_MCP_Bridge.applyConfig()
 
 rollout AIRA_MCP_Bridge_UI "AIRA MCP Bridge" width:280 height:86
 (
     label lblStatus "Bridge not started." pos:[12,12] width:255 height:18
-    label lblPort "127.0.0.1:37820" pos:[12,34] width:255 height:18
+    label lblPort "" pos:[12,34] width:255 height:18
     timer tmrBridge interval:100 active:true
 
     on AIRA_MCP_Bridge_UI open do
     (
+        AIRA_MCP_Bridge.applyConfig()
+        lblPort.text = AIRA_MCP_Bridge.host + ":" + (AIRA_MCP_Bridge.port as string)
         local ok = AIRA_MCP_Bridge.startListener()
         lblStatus.text = if ok then "Bridge running." else "Bridge failed."
     )

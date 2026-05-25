@@ -12,11 +12,53 @@ global AIRA_Stage02
 global AIRA_Stage02_UI
 global AIRA_STAGE02_HEADLESS
 
+fn AIRA_stage02GetEnv key defaultValue =
+(
+    local value = (dotNetClass "System.Environment").GetEnvironmentVariable key
+    if value == undefined or value == "" then defaultValue else value
+)
+
+fn AIRA_stage02JoinPath dir fileName =
+(
+    local d = dir as string
+    if d == "" then fileName
+    else
+    (
+        local lastChar = substring d d.count 1
+        if lastChar == "\\" or lastChar == "/" then d + fileName else d + "\\" + fileName
+    )
+)
+
+fn AIRA_stage02ToolRoot =
+(
+    local envRoot = AIRA_stage02GetEnv "AIRA_TOOL_ROOT" ""
+    if envRoot != "" then envRoot
+    else
+    (
+        local sourceFile = ""
+        try(sourceFile = getSourceFileName())catch(sourceFile = "")
+        if sourceFile != undefined and sourceFile != "" then
+        (
+            local di = dotNetObject "System.IO.DirectoryInfo" (getFilenamePath sourceFile)
+            di.Parent.FullName
+        )
+        else "."
+    )
+)
+
+fn AIRA_stage02DefaultOutDir =
+(
+    local outDir = AIRA_stage02GetEnv "AIRA_STAGE02_OUT_DIR" ""
+    if outDir == "" do outDir = AIRA_stage02GetEnv "AIRA_OUT_DIR" ""
+    if outDir == "" do outDir = AIRA_stage02JoinPath (AIRA_stage02ToolRoot()) @"out\stage02_current_scene"
+    outDir
+)
+
 struct AIRAStage02SkinTool
 (
     prefix = "AIRA",
     bipedName = "AIRA_Biped_COM",
-    outDir = @"F:\workspace\github\3dsmax-ai-rig-assistant\out\stage02_current_scene",
+    outDir = AIRA_stage02DefaultOutDir(),
     boneAffectLimit = 3,
     maxAssignedInfluences = 3,
     epsilon = 0.00001,

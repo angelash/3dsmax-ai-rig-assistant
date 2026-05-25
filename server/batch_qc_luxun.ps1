@@ -1,6 +1,8 @@
 $ErrorActionPreference = "Stop"
 
-$ToolRoot = "F:\workspace\github\3dsmax-ai-rig-assistant"
+. (Join-Path $PSScriptRoot "aira_config.ps1")
+
+$ToolRoot = Get-AiraToolRoot
 $SourceFbx = Join-Path $ToolRoot "source\luxun_model\陆逊模型.fbx"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 

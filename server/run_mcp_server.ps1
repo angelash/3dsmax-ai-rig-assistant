@@ -1,11 +1,14 @@
 $ErrorActionPreference = "Stop"
 
-$Root = Split-Path -Parent $PSScriptRoot
-$Python = Join-Path $Root ".venv\Scripts\python.exe"
+. (Join-Path $PSScriptRoot "aira_config.ps1")
+
+$Config = Set-AiraProcessEnvironmentFromConfig
+$Root = $Config.toolRoot
+$Python = $Config.python
 $Server = Join-Path $PSScriptRoot "mcp_server.py"
 
 if (-not (Test-Path -LiteralPath $Python)) {
-    throw "Missing venv Python: $Python. Run: python -m venv F:\workspace\github\3dsmax-ai-rig-assistant\.venv"
+    throw "Missing venv Python: $Python. Run: server\setup_local.ps1"
 }
 
 & $Python $Server

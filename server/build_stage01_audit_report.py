@@ -755,9 +755,12 @@ def build_report(out_dir: Path, report_root: Path, pack_name: str, apply_numbere
 
 
 def main() -> int:
+    tool_root = Path(__file__).resolve().parents[1]
+    default_out_dir = os.environ.get("AIRA_OUT_DIR", str(tool_root / "out"))
+    default_report_root = os.environ.get("AIRA_REPORT_ROOT", str(tool_root / "report"))
     parser = argparse.ArgumentParser(description="Build an all-model Stage01 visual audit report pack for A1 runs.")
-    parser.add_argument("--out-dir", default=r"F:\workspace\github\3dsmax-ai-rig-assistant\out")
-    parser.add_argument("--report-root", default=r"F:\workspace\github\3dsmax-ai-rig-assistant\report")
+    parser.add_argument("--out-dir", default=default_out_dir)
+    parser.add_argument("--report-root", default=default_report_root)
     parser.add_argument("--pack-name", default="")
     parser.add_argument("--skip-layout", action="store_true", help="Do not apply numbered layout before collecting images.")
     args = parser.parse_args()

@@ -41,16 +41,16 @@
 旧 benchmark 目录和 `default_recommended/` 只保留为历史材料。相关脚本默认会报错：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\benchmark_luxun_algorithms.ps1
-F:\workspace\github\3dsmax-ai-rig-assistant\server\check_algorithm_default.ps1
-F:\workspace\github\3dsmax-ai-rig-assistant\server\promote_recommended_algorithm.ps1
-F:\workspace\github\3dsmax-ai-rig-assistant\server\list_algorithm_benchmarks.ps1
+.\server\benchmark_luxun_algorithms.ps1
+.\server\check_algorithm_default.ps1
+.\server\promote_recommended_algorithm.ps1
+.\server\list_algorithm_benchmarks.ps1
 ```
 
 如果只是研究旧实验，可以显式加研究参数汇总历史：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\list_algorithm_benchmarks.ps1 -LegacyScoringResearchOnly
+.\server\list_algorithm_benchmarks.ps1 -LegacyScoringResearchOnly
 ```
 
 这个输出不能作为默认推荐或 Skin 放行依据。

@@ -4,6 +4,8 @@
 .idea/
 .env
 .env.*
+config/local.json
+config/mcp.local.json
 
 # Local Python runtime
 .venv/

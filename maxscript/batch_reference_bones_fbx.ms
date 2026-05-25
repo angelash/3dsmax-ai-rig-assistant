@@ -17,6 +17,17 @@ fn getEnv key defaultValue =
     if value == undefined or value == "" then defaultValue else value
 )
 
+fn joinPath dir fileName =
+(
+    local d = dir as string
+    if d == "" then fileName
+    else
+    (
+        local lastChar = substring d d.count 1
+        if lastChar == "\\" or lastChar == "/" then d + fileName else d + "\\" + fileName
+    )
+)
+
 fn jsonString value =
 (
     local s = value as string
@@ -235,7 +246,8 @@ fn main =
 (
     local fbxPath = getEnv "AIRA_REF_FBX_PATH" ""
     local assetName = getEnv "AIRA_REF_ASSET_NAME" "reference_asset"
-    local outDir = getEnv "AIRA_REF_OUT_DIR" @"F:\workspace\github\3dsmax-ai-rig-assistant\out\reference_bones"
+    local toolRoot = getEnv "AIRA_TOOL_ROOT" "."
+    local outDir = getEnv "AIRA_REF_OUT_DIR" (joinPath (getEnv "AIRA_OUT_DIR" (joinPath toolRoot "out")) "reference_bones")
     if fbxPath == "" or not doesFileExist fbxPath do throw ("FBX file not found: " + fbxPath)
     resetMaxFile #noPrompt
     local importOk = safeImportFbx fbxPath

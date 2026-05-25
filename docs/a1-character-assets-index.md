@@ -1,7 +1,7 @@
 # A1 角色资产索引与绑骨校对基准
 
 更新时间：2026-05-21  
-资产根目录：`F:\workspace\github\3dsmax-ai-rig-assistant\source\A1角色`
+资产根目录：`source\A1角色`，或 `config/local.json` 中配置的 `sourceRoot\A1角色`
 
 这批资产可以当作“原题 + 参考答案”的校对集来使用：原模型 FBX 是待处理输入，已绑定骨骼 FBX/JSON 是参考答案，视图图和贴图用于人工/VLM 多视角复核。注意这些参考答案多数来自 AccuRig 导出，适合作为骨架命名、骨点集合、姿态和绑定结果的监督信号；是否达到产品级，还要继续通过 3ds Max 里的 Skin、权重、测试动作和导出检查来确认。
 

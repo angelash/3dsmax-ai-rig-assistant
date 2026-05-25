@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -166,7 +167,7 @@ def asset_qc_fbx_file(fbx_path: str, asset_name: str = "") -> dict[str, Any]:
         raise RuntimeError((completed.stderr or completed.stdout).strip())
 
     output_name = "".join("_" if ch in '\\/:*?"<>|' else ch for ch in safe_asset_name)
-    out_dir = TOOL_ROOT / "out"
+    out_dir = Path(os.environ.get("AIRA_OUT_DIR", str(TOOL_ROOT / "out")))
     batch_result = _parse_batch_json(completed.stdout)
     if batch_result:
         batch_result["batchReturnCode"] = completed.returncode
@@ -246,7 +247,7 @@ def stage01_rig_fbx_file(
         raise RuntimeError((completed.stderr or completed.stdout).strip())
 
     output_name = "".join("_" if ch in '\\/:*?"<>|' else ch for ch in safe_asset_name)
-    out_dir = TOOL_ROOT / "out"
+    out_dir = Path(os.environ.get("AIRA_OUT_DIR", str(TOOL_ROOT / "out")))
     batch_result = _parse_batch_json(completed.stdout)
     if batch_result:
         batch_result["batchReturnCode"] = completed.returncode
@@ -344,7 +345,7 @@ def stage02_skin_max_file(
         return batch_result
 
     output_name = "".join("_" if ch in '\\/:*?"<>|' else ch for ch in safe_asset_name)
-    out_dir = TOOL_ROOT / "out" / "stage02_runs" / output_name
+    out_dir = Path(os.environ.get("AIRA_OUT_DIR", str(TOOL_ROOT / "out"))) / "stage02_runs" / output_name
     return {
         "ok": True,
         "sourceMax": str(source),

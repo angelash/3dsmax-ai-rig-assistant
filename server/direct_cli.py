@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from max_bridge_client import send_bridge_command
+from max_bridge_client import DEFAULT_HOST, DEFAULT_PORT, send_bridge_command
 
 
 COMMANDS = [
@@ -26,8 +26,8 @@ COMMANDS = [
 def main() -> int:
     parser = argparse.ArgumentParser(description="Call the local 3ds Max AIRA bridge directly.")
     parser.add_argument("command", choices=COMMANDS)
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=37820)
+    parser.add_argument("--host", default=DEFAULT_HOST)
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--timeout", type=float, default=60.0)
     args = parser.parse_args()
 

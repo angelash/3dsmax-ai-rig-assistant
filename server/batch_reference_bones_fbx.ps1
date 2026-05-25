@@ -4,14 +4,23 @@ param(
 
     [string]$AssetName = "",
 
-    [string]$OutDir = ""
+    [string]$OutDir = "",
+
+    [string]$MaxBatch = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-$ToolRoot = "F:\workspace\github\3dsmax-ai-rig-assistant"
+. (Join-Path $PSScriptRoot "aira_config.ps1")
+
+$AiraConfig = Set-AiraProcessEnvironmentFromConfig
+$ToolRoot = $AiraConfig.toolRoot
 $BatchScript = Join-Path $ToolRoot "maxscript\batch_reference_bones_fbx.ms"
-$MaxBatch = "D:\Program files\Autodesk\3ds Max 2020\3dsmaxbatch.exe"
+$MaxBatch = Get-AiraMaxBatch $MaxBatch
+
+if (-not (Test-Path -LiteralPath $MaxBatch -PathType Leaf)) {
+    throw "3dsmaxbatch.exe not found: $MaxBatch. Run server\setup_local.ps1 or set AIRA_MAXBATCH."
+}
 
 if (-not (Test-Path -LiteralPath $ReferenceFbx)) {
     throw "Reference FBX file not found: $ReferenceFbx"
@@ -23,7 +32,7 @@ if ([string]::IsNullOrWhiteSpace($AssetName)) {
 
 $SafeAssetName = ($AssetName -replace '[\\/:*?"<>|]', '_')
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
-    $OutDir = Join-Path $ToolRoot "out\reference_bones\$SafeAssetName"
+    $OutDir = Join-Path (Get-AiraOutDir) "reference_bones\$SafeAssetName"
 }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null

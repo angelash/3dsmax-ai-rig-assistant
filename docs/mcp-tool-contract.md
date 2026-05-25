@@ -165,7 +165,7 @@
 
 ```json
 {
-  "fbx_path": "F:\\workspace\\open-share\\陆逊模型.fbx",
+  "fbx_path": "<repo>\\source\\luxun_model\\陆逊模型.fbx",
   "asset_name": "luxun_model"
 }
 ```
@@ -176,7 +176,7 @@
 
 ```json
 {
-  "fbx_path": "F:\\workspace\\open-share\\陆逊模型.fbx",
+  "fbx_path": "<repo>\\source\\luxun_model\\陆逊模型.fbx",
   "asset_name": "luxun_model",
   "guide_algorithm": "tutorial_centerline_qbird",
   "visual_signoff_json": "",
@@ -233,9 +233,9 @@
 
 ```json
 {
-  "source_max": "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\out\\runs\\luxun_model__YYYYMMDD_HHMMSS\\scene\\luxun_model_stage01_rig_scene.max",
+  "source_max": "<repo>\\out\\runs\\luxun_model__YYYYMMDD_HHMMSS\\scene\\luxun_model_stage01_rig_scene.max",
   "asset_name": "luxun_model",
-  "stage01_skin_prep_gate_json": "F:\\workspace\\github\\3dsmax-ai-rig-assistant\\out\\runs\\luxun_model__YYYYMMDD_HHMMSS\\data\\luxun_model_stage01_skin_prep_gate.json",
+  "stage01_skin_prep_gate_json": "<repo>\\out\\runs\\luxun_model__YYYYMMDD_HHMMSS\\data\\luxun_model_stage01_skin_prep_gate.json",
   "allow_blocked_stage01": false,
   "bone_affect_limit": 3,
   "reference_fbx": ""

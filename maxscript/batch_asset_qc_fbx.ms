@@ -112,11 +112,14 @@ fn safeImportFbx fbxPath =
 
 fn main =
 (
-    local outDir = @"F:\workspace\github\3dsmax-ai-rig-assistant\out"
+    local toolRoot = getEnv "AIRA_TOOL_ROOT" "."
+    local outDir = getEnv "AIRA_QC_OUT_DIR" (getEnv "AIRA_OUT_DIR" (joinPath toolRoot "out"))
+    local sourceRoot = getEnv "AIRA_SOURCE_ROOT" (joinPath toolRoot "source")
     local asciiFbxPath = outDir + @"\luxun_model.fbx"
-    local fbxPath = getEnv "AIRA_QC_FBX_PATH" (if doesFileExist asciiFbxPath then asciiFbxPath else @"F:\workspace\github\3dsmax-ai-rig-assistant\source\luxun_model\陆逊模型.fbx")
+    local fallbackFbxPath = joinPath sourceRoot @"luxun_model\陆逊模型.fbx"
+    local fbxPath = getEnv "AIRA_QC_FBX_PATH" (if doesFileExist asciiFbxPath then asciiFbxPath else fallbackFbxPath)
     local assetName = getEnv "AIRA_QC_ASSET_NAME" (getFilenameFile fbxPath)
-    local qcPath = @"F:\workspace\github\3dsmax-ai-rig-assistant\maxscript\aira_asset_qc.ms"
+    local qcPath = joinPath (joinPath toolRoot "maxscript") "aira_asset_qc.ms"
     local scenePath = outDir + @"\" + assetName + @"_raw_asset_qc_scene.max"
 
     ensureDir outDir
@@ -129,6 +132,7 @@ fn main =
     if not importOk do throw ("No geometry imported from FBX: " + fbxPath)
 
     fileIn qcPath
+    AIRA_AssetQC.outDir = outDir
     local result = AIRA_AssetQC.writeReports assetName
     saveMaxFile scenePath
 

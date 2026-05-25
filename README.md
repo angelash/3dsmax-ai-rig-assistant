@@ -30,6 +30,9 @@ MCP 入口只暴露白名单工具，不让 AI 任意执行 MaxScript。
 | `maxscript/batch_stage02_deform_test.ms` | `3dsmaxbatch.exe` 离线执行 Stage02 动作变形 smoke test 的 MaxScript |
 | `server/mcp_server.py` | Python MCP server，暴露白名单工具 |
 | `server/direct_cli.py` | 不经过 MCP 客户端的直连测试命令 |
+| `server/aira_config.ps1` | PowerShell 共享配置读取、路径推导和 3ds Max batch 自动探测 |
+| `server/setup_local.ps1` | 每台机器首次使用的自配置脚本，生成 `config/local.json` 和 `config/mcp.local.json` |
+| `server/doctor.ps1` | 本机环境自检脚本，检查 Python、依赖、3ds Max batch、MCP 配置和桥接状态 |
 | `server/run_mcp_server.ps1` | 手动启动 MCP server |
 | `server/stage01_auto.ps1` | 直连执行 Stage01 粗自动流程 |
 | `server/batch_qc_fbx.ps1` | 离线检测任意本地 FBX |
@@ -49,6 +52,7 @@ MCP 入口只暴露白名单工具，不让 AI 任意执行 MaxScript。
 | `server/stage01_ct_ordered_refine_probe.py` | 研究期局部 CT 修复 probe，按教程顺序测试逐段修复的正负收益 |
 | `presets/luban_stage01_biped.json` | 鲁班七号这类卡通矮角色的 Biped 结构预设 |
 | `presets/guide_algorithms.json` | Guide 候选生成器登记表，当前只启用 `tutorial_centerline_qbird` |
+| `config/local.example.json` | 可提交的本地配置模板；实际机器使用 `config/local.json`，不提交 |
 | `docs/stage01-self-learning-rigging-standard.md` | Stage01 自学习自成长绑骨默认启动规范 |
 | `docs/stage01-workflow.md` | 使用流程、坐标约定、边界说明 |
 | `docs/stage02-skin-workflow.md` | 独立 Skin 设置、初始权重和生产边界说明 |
@@ -60,6 +64,39 @@ MCP 入口只暴露白名单工具，不让 AI 任意执行 MaxScript。
 
 本地实验模型和贴图放在 `source/`，例如 `source/luxun_model/陆逊模型.fbx` 和同名 `.fbm/` 贴图目录。`source/` 已加入 `.gitignore`，只作为本机运行输入，不提交到仓库。
 
+## 本地配置与自检
+
+每台新电脑首次同步仓库后，先在仓库根目录运行：
+
+```powershell
+.\server\setup_local.ps1
+```
+
+它会自动探测 `3dsmaxbatch.exe`，创建 `source/`、`out/`、`report/`，创建/使用 `.venv`，安装基础依赖，并生成：
+
+- `config/local.json`：本机路径配置，不提交。
+- `config/mcp.local.json`：可复制到 MCP 客户端的本机配置，不提交。
+
+如果只想生成配置、不安装依赖：
+
+```powershell
+.\server\setup_local.ps1 -SkipVenv -SkipInstall
+```
+
+自检：
+
+```powershell
+.\server\doctor.ps1
+```
+
+需要连 3ds Max 桥接一起检查时，先在 3ds Max 里运行 `maxscript/aira_mcp_bridge.ms`，再执行：
+
+```powershell
+.\server\doctor.ps1 -CheckBridge
+```
+
+主要可配置项在 `config/local.json`：`toolRoot`、`sourceRoot`、`outDir`、`reportRoot`、`python`、`maxBatch`、`bridge.host`、`bridge.port`。也可以用环境变量覆盖：`AIRA_TOOL_ROOT`、`AIRA_SOURCE_ROOT`、`AIRA_OUT_DIR`、`AIRA_REPORT_ROOT`、`AIRA_PYTHON`、`AIRA_MAXBATCH`、`AIRA_MCP_HOST`、`AIRA_MCP_PORT`。
+
 ## 快速使用
 
 1. 在 3ds Max 2020+ 打开角色模型。
@@ -67,7 +104,7 @@ MCP 入口只暴露白名单工具，不让 AI 任意执行 MaxScript。
 3. 运行：
 
    ```text
-   Scripting > Run Script > F:/workspace/github/3dsmax-ai-rig-assistant/maxscript/aira_stage01_biped.ms
+   Scripting > Run Script > <repo>/maxscript/aira_stage01_biped.ms
    ```
 
 4. 点击 `Create / Update Guides`。
@@ -81,10 +118,11 @@ MCP 入口只暴露白名单工具，不让 AI 任意执行 MaxScript。
 离线检测一个 FBX：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_qc_fbx.ps1 -SourceFbx "F:\workspace\github\3dsmax-ai-rig-assistant\source\luxun_model\陆逊模型.fbx" -AssetName luxun_model
+$repo = (Resolve-Path .).Path
+& "$repo\server\batch_qc_fbx.ps1" -SourceFbx "$repo\source\luxun_model\陆逊模型.fbx" -AssetName luxun_model
 ```
 
-输出在 `F:/workspace/github/3dsmax-ai-rig-assistant/out/`：
+默认输出在 `out/`，也可通过 `config/local.json` 的 `outDir` 或命令行 `-OutDir` 覆盖：
 
 - `luxun_model_asset_qc.json`
 - `luxun_model_asset_qc.md`
@@ -99,7 +137,8 @@ Stage01 绑骨默认启用自学习自成长规范：详见 `docs/stage01-self-l
 离线生成 Stage01 骨架和自检报告：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage01_fbx.ps1 -SourceFbx "F:\workspace\github\3dsmax-ai-rig-assistant\source\luxun_model\陆逊模型.fbx" -AssetName luxun_model
+$repo = (Resolve-Path .).Path
+& "$repo\server\batch_stage01_fbx.ps1" -SourceFbx "$repo\source\luxun_model\陆逊模型.fbx" -AssetName luxun_model
 ```
 
 默认也是唯一允许的 Guide 候选生成器是 `tutorial_centerline_qbird`。旧的 `bbox_humanoid`、`mesh_profile`、`qbird_profile`、`semantic_qbird`、`visual_semantic_qbird`、`tutorial_visual_qbird` 已屏蔽，不能再作为推荐或生产判断入口。
@@ -134,10 +173,11 @@ Stage01 会先从 mesh 顶点做高度切片，识别宽高比、深高比、最
 Stage02 独立读取 Stage01 产出的 `.max` 场景，不创建 Guide，不重新拟合 Biped，也不改 Stage01 绑骨逻辑。默认必须提供 `*_stage01_skin_prep_gate.json` 且其中 `skinSetupReady=true`；如果只是研究第一版自动权重，可以显式加 `-AllowBlockedStage01`，报告会保持 `productionReady=false`。
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage02_skin.ps1 `
-  -SourceMax "F:\workspace\github\3dsmax-ai-rig-assistant\out\runs\luxun_model__YYYYMMDD_HHMMSS\scene\luxun_model_stage01_rig_scene.max" `
+$repo = (Resolve-Path .).Path
+& "$repo\server\batch_stage02_skin.ps1" `
+  -SourceMax "$repo\out\runs\luxun_model__YYYYMMDD_HHMMSS\scene\luxun_model_stage01_rig_scene.max" `
   -AssetName luxun_model `
-  -Stage01SkinPrepGateJson "F:\workspace\github\3dsmax-ai-rig-assistant\out\runs\luxun_model__YYYYMMDD_HHMMSS\data\luxun_model_stage01_skin_prep_gate.json"
+  -Stage01SkinPrepGateJson "$repo\out\runs\luxun_model__YYYYMMDD_HHMMSS\data\luxun_model_stage01_skin_prep_gate.json"
 ```
 
 它会添加/复用 `Skin` 修改器，把变形用 Biped 节点加入 Skin，按教程默认把 Bone Affect Limit 设为 `3`，再用 Biped 段距离、左右侧和高度区域做第一轮权重。若同拓扑资产有已蒙皮参考答案，可额外传 `-ReferenceFbx`，脚本会读取参考 Skin 权重并压缩映射到当前 21 个简化 Biped 变形骨上，避免纯距离猜权重。输出放在 `out/stage02_runs/<assetName>__YYYYMMDD_HHMMSS/` 或 `out/stage02_runs/<assetName>__YYYYMMDD_HHMMSS_refcollapse/`，详见 `docs/stage02-skin-workflow.md`。
@@ -145,7 +185,8 @@ F:\workspace\github\3dsmax-ai-rig-assistant\server\batch_stage02_skin.ps1 `
 整理已有输出目录：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspace\github\3dsmax-ai-rig-assistant\server\organize_out_dir.py --out-dir F:\workspace\github\3dsmax-ai-rig-assistant\out
+$repo = (Resolve-Path .).Path
+& "$repo\.venv\Scripts\python.exe" "$repo\server\organize_out_dir.py" --out-dir "$repo\out"
 ```
 
 `batch_stage01_fbx.ps1` 会在每次生成结束后自动调用这个整理脚本；这个命令主要用于整理历史输出或手动刷新 README。整理后每个 `out/runs/<assetName>__YYYYMMDD_HHMMSS/README.md` 会说明该模型大致由哪个命令、哪个视觉候选生成器生成，并汇总当前语义阻塞项。run 根目录不再平铺文件，而是按用途放到：
@@ -179,29 +220,30 @@ F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspac
 几何骨架外部探测需要额外依赖：
 
 ```powershell
-F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe -m pip install -r F:\workspace\github\3dsmax-ai-rig-assistant\requirements-geometry.txt
+$repo = (Resolve-Path .).Path
+& "$repo\.venv\Scripts\python.exe" -m pip install -r "$repo\requirements-geometry.txt"
 ```
 
 ## MCP 运行
 
 1. 在 3ds Max 中运行 `maxscript/aira_mcp_bridge.ms`。
-2. 用隔离环境运行 MCP server，配置见 `config/mcp.example.json`。
+2. 运行 `.\server\setup_local.ps1` 生成 `config/mcp.local.json`，把它接入 MCP 客户端。
 3. 先用直连命令检查：
 
    ```powershell
-   F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspace\github\3dsmax-ai-rig-assistant\server\direct_cli.py ping
+   .\server\doctor.ps1 -CheckBridge
    ```
 
 4. 需要检测当前 Max 场景时：
 
    ```powershell
-   F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspace\github\3dsmax-ai-rig-assistant\server\direct_cli.py asset_qc_current_scene
+   .\.venv\Scripts\python.exe .\server\direct_cli.py asset_qc_current_scene
    ```
 
 5. 需要粗自动执行第一篇流程时：
 
    ```powershell
-   F:\workspace\github\3dsmax-ai-rig-assistant\.venv\Scripts\python.exe F:\workspace\github\3dsmax-ai-rig-assistant\server\direct_cli.py stage01_auto_pipeline
+   .\server\stage01_auto.ps1
    ```
 
 ## 为什么先用 Guide

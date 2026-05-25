@@ -15,13 +15,17 @@ param(
 
     [string]$OutDir = "",
 
-    [string]$MaxBatch = "D:\Program files\Autodesk\3ds Max 2020\3dsmaxbatch.exe"
+    [string]$MaxBatch = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-$ToolRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "aira_config.ps1")
+
+$AiraConfig = Set-AiraProcessEnvironmentFromConfig
+$ToolRoot = $AiraConfig.toolRoot
 $BatchScript = Join-Path $ToolRoot "maxscript\batch_stage02_skin.ms"
+$MaxBatch = Get-AiraMaxBatch $MaxBatch
 
 if (-not (Test-Path -LiteralPath $SourceMax)) {
     throw "Source MAX scene not found: $SourceMax"
@@ -50,7 +54,7 @@ if ([string]::IsNullOrWhiteSpace($AssetName)) {
 
 $SafeAssetName = ($AssetName -replace '[\\/:*?"<>|]', '_')
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
-    $OutRoot = Join-Path $ToolRoot "out\stage02_runs"
+    $OutRoot = Join-Path (Get-AiraOutDir) "stage02_runs"
 }
 else {
     $OutRoot = $OutDir

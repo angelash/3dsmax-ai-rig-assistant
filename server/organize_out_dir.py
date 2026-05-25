@@ -911,6 +911,7 @@ def write_run_readme(run_dir: Path, asset_name: str) -> None:
     match = re.search(r"- FBX:\s*`([^`]+)`", summary_text)
     if match:
         fbx_line = match.group(1)
+    source_for_command = fbx_line or "<source.fbx>"
 
     write_run_subdir_readmes(run_dir, asset_name)
     pairs = write_screenshot_pairs(run_dir, asset_name)
@@ -933,7 +934,8 @@ def write_run_readme(run_dir: Path, asset_name: str) -> None:
         "- Equivalent command:",
         "",
         "```powershell",
-        f'tools\\3dsmax-ai-rig-assistant\\server\\batch_stage01_fbx.ps1 -SourceFbx "F:\\workspace\\open-share\\陆逊模型.fbx" -AssetName {asset_name} -GuideAlgorithm tutorial_centerline_qbird',
+        "$repo = (Resolve-Path .).Path",
+        f'& "$repo\\server\\batch_stage01_fbx.ps1" -SourceFbx "{source_for_command}" -AssetName {asset_name} -GuideAlgorithm tutorial_centerline_qbird',
         "```",
         "",
         "说明：`.fbx` 是给 3ds Max batch 使用的 ASCII-safe 工作副本。部分 JSON 内部路径仍可能保留生成瞬间的旧 `out` 路径，实际整理后的文件以本目录结构为准。",

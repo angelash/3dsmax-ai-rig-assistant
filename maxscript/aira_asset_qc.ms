@@ -13,9 +13,51 @@ Production-oriented asset inspection:
 
 global AIRA_AssetQC
 
+fn AIRA_assetQcGetEnv key defaultValue =
+(
+    local value = (dotNetClass "System.Environment").GetEnvironmentVariable key
+    if value == undefined or value == "" then defaultValue else value
+)
+
+fn AIRA_assetQcJoinPath dir fileName =
+(
+    local d = dir as string
+    if d == "" then fileName
+    else
+    (
+        local lastChar = substring d d.count 1
+        if lastChar == "\\" or lastChar == "/" then d + fileName else d + "\\" + fileName
+    )
+)
+
+fn AIRA_assetQcToolRoot =
+(
+    local envRoot = AIRA_assetQcGetEnv "AIRA_TOOL_ROOT" ""
+    if envRoot != "" then envRoot
+    else
+    (
+        local sourceFile = ""
+        try(sourceFile = getSourceFileName())catch(sourceFile = "")
+        if sourceFile != undefined and sourceFile != "" then
+        (
+            local di = dotNetObject "System.IO.DirectoryInfo" (getFilenamePath sourceFile)
+            di.Parent.FullName
+        )
+        else "."
+    )
+)
+
+fn AIRA_assetQcDefaultOutDir =
+(
+    local outDir = AIRA_assetQcGetEnv "AIRA_QC_OUT_DIR" ""
+    if outDir == "" do outDir = AIRA_assetQcGetEnv "AIRA_OUT_DIR" ""
+    if outDir == "" do outDir = AIRA_assetQcJoinPath (AIRA_assetQcToolRoot()) "out"
+    outDir
+)
+
 struct AIRAAssetQCTool
 (
-    outDir = @"F:\workspace\github\3dsmax-ai-rig-assistant\out",
+    outDir = AIRA_assetQcDefaultOutDir(),
     triangleLimit = 12000,
     vertexInfluenceLimit = 4,
     originTolerance = 0.01,

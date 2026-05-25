@@ -6,13 +6,17 @@ param(
 
     [string]$OutDir = "",
 
-    [string]$MaxBatch = "D:\Program files\Autodesk\3ds Max 2020\3dsmaxbatch.exe"
+    [string]$MaxBatch = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-$ToolRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "aira_config.ps1")
+
+$AiraConfig = Set-AiraProcessEnvironmentFromConfig
+$ToolRoot = $AiraConfig.toolRoot
 $BatchScript = Join-Path $ToolRoot "maxscript\batch_stage02_deform_test.ms"
+$MaxBatch = Get-AiraMaxBatch $MaxBatch
 
 if (-not (Test-Path -LiteralPath $SourceMax)) {
     throw "Source Stage02 MAX scene not found: $SourceMax"
@@ -33,7 +37,7 @@ if ([string]::IsNullOrWhiteSpace($AssetName)) {
 
 $SafeAssetName = ($AssetName -replace '[\\/:*?"<>|]', '_')
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
-    $OutRoot = Join-Path $ToolRoot "out\stage02_deform_tests"
+    $OutRoot = Join-Path (Get-AiraOutDir) "stage02_deform_tests"
 }
 else {
     $OutRoot = $OutDir

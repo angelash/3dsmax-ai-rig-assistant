@@ -55,15 +55,15 @@ fn safeImportFbx fbxPath =
 
 fn main =
 (
-    local toolRoot = @"F:\workspace\github\3dsmax-ai-rig-assistant"
+    local toolRoot = getEnv "AIRA_TOOL_ROOT" "."
     local sourceMax = getEnv "AIRA_STAGE02_SOURCE_MAX" ""
     local assetName = getEnv "AIRA_STAGE02_ASSET_NAME" "stage02_asset"
-    local outDir = getEnv "AIRA_STAGE02_OUT_DIR" (toolRoot + @"\out\stage02_current_scene")
+    local outDir = getEnv "AIRA_STAGE02_OUT_DIR" (joinPath (getEnv "AIRA_OUT_DIR" (joinPath toolRoot "out")) "stage02_current_scene")
     local affectLimit = (getEnv "AIRA_STAGE02_BONE_AFFECT_LIMIT" "3") as integer
     local referenceFbx = getEnv "AIRA_STAGE02_REFERENCE_FBX" ""
     local gateStatus = getEnv "AIRA_STAGE02_STAGE01_GATE_STATUS" "not_provided"
-    local stage02Path = toolRoot + @"\maxscript\aira_stage02_skin.ms"
-    local assetQcPath = toolRoot + @"\maxscript\aira_asset_qc.ms"
+    local stage02Path = joinPath (joinPath toolRoot "maxscript") "aira_stage02_skin.ms"
+    local assetQcPath = joinPath (joinPath toolRoot "maxscript") "aira_asset_qc.ms"
     local sceneDir = joinPath outDir "scene"
     local reportsDir = joinPath outDir "reports"
     local dataDir = joinPath outDir "data"

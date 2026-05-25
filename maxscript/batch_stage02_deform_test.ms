@@ -347,8 +347,8 @@ fn runPose sourceMax assetName outDir poseId =
     resetMaxFile #noPrompt
     local loadOk = true
     try(loadMaxFile sourceMax quiet:true)catch(loadOk = false)
-    local toolRoot = @"F:\workspace\github\3dsmax-ai-rig-assistant"
-    fileIn (toolRoot + @"\maxscript\aira_stage02_skin.ms")
+    local toolRoot = getEnv "AIRA_TOOL_ROOT" "."
+    fileIn (joinPath (joinPath toolRoot "maxscript") "aira_stage02_skin.ms")
     local nodes = modelNodes()
     local baseVerts = collectSnapshotVertices nodes
     local baseBounds = modelBounds nodes
@@ -477,10 +477,10 @@ fn writeReports assetName sourceMax outDir results =
 
 fn main =
 (
-    local toolRoot = @"F:\workspace\github\3dsmax-ai-rig-assistant"
+    local toolRoot = getEnv "AIRA_TOOL_ROOT" "."
     local sourceMax = getEnv "AIRA_STAGE02_DEFORM_SOURCE_MAX" ""
     local assetName = getEnv "AIRA_STAGE02_ASSET_NAME" "stage02_asset"
-    local outDir = getEnv "AIRA_STAGE02_DEFORM_OUT_DIR" (toolRoot + @"\out\stage02_deform_current")
+    local outDir = getEnv "AIRA_STAGE02_DEFORM_OUT_DIR" (joinPath (getEnv "AIRA_OUT_DIR" (joinPath toolRoot "out")) "stage02_deform_current")
     local reportsDir = joinPath outDir "reports"
     local logsDir = joinPath outDir "logs"
     ensureDir outDir

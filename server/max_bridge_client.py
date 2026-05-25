@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
-from typing import Any
+from typing import Any, Optional
 
 
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 37820
+DEFAULT_HOST = os.environ.get("AIRA_MCP_HOST", "127.0.0.1")
+DEFAULT_PORT = int(os.environ.get("AIRA_MCP_PORT", "37820"))
 DEFAULT_TIMEOUT = 60.0
 
 
@@ -16,8 +17,8 @@ class MaxBridgeError(RuntimeError):
 
 def send_bridge_command(
     command: str,
-    host: str = DEFAULT_HOST,
-    port: int = DEFAULT_PORT,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> dict[str, Any]:
     """Send one whitelisted command to the 3ds Max bridge."""
@@ -25,6 +26,9 @@ def send_bridge_command(
     command = command.strip()
     if not command:
         raise MaxBridgeError("Bridge command cannot be empty.")
+
+    host = host or os.environ.get("AIRA_MCP_HOST", DEFAULT_HOST)
+    port = int(port or os.environ.get("AIRA_MCP_PORT", DEFAULT_PORT))
 
     try:
         with socket.create_connection((host, port), timeout=timeout) as sock:

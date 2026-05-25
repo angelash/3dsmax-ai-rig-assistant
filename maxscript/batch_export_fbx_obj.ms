@@ -13,6 +13,17 @@ fn getEnv key defaultValue =
     if value == undefined or value == "" then defaultValue else value
 )
 
+fn joinPath dir fileName =
+(
+    local d = dir as string
+    if d == "" then fileName
+    else
+    (
+        local lastChar = substring d d.count 1
+        if lastChar == "\\" or lastChar == "/" then d + fileName else d + "\\" + fileName
+    )
+)
+
 fn safeImportFbx fbxPath =
 (
     local beforeCount = geometry.count
@@ -22,7 +33,8 @@ fn safeImportFbx fbxPath =
 
 fn main =
 (
-    local outDir = @"F:\workspace\github\3dsmax-ai-rig-assistant\out"
+    local toolRoot = getEnv "AIRA_TOOL_ROOT" "."
+    local outDir = getEnv "AIRA_EXPORT_OUT_DIR" (getEnv "AIRA_OUT_DIR" (joinPath toolRoot "out"))
     local fbxPath = getEnv "AIRA_EXPORT_FBX_PATH" (outDir + @"\luxun_model.fbx")
     local assetName = getEnv "AIRA_EXPORT_ASSET_NAME" "luxun_model"
     local objPath = outDir + @"\" + assetName + @".obj"

@@ -15,13 +15,17 @@ param(
 
     [int]$MaxFitIterations = 18,
 
-    [string]$OutDir = ""
+    [string]$OutDir = "",
+
+    [string]$MaxBatch = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-$RepoRoot = "F:\workspace\open-share"
-$ToolRoot = "F:\workspace\github\3dsmax-ai-rig-assistant"
+. (Join-Path $PSScriptRoot "aira_config.ps1")
+
+$AiraConfig = Set-AiraProcessEnvironmentFromConfig
+$ToolRoot = $AiraConfig.toolRoot
 $BatchScript = Join-Path $ToolRoot "maxscript\batch_stage01_fbx_test.ms"
 $VisualQcScript = Join-Path $ToolRoot "server\visual_qc.py"
 $VisualReviewPackScript = Join-Path $ToolRoot "server\visual_review_pack.py"
@@ -30,9 +34,13 @@ $RigDetailReviewScript = Join-Path $ToolRoot "server\rig_detail_review.py"
 $SkinPrepGateScript = Join-Path $ToolRoot "server\stage01_skin_prep_gate.py"
 $OrganizeOutScript = Join-Path $ToolRoot "server\organize_out_dir.py"
 $NumberedLayoutScript = Join-Path $ToolRoot "server\stage01_numbered_layout.py"
-$Python = Join-Path $ToolRoot ".venv\Scripts\python.exe"
-$MaxBatch = "D:\Program files\Autodesk\3ds Max 2020\3dsmaxbatch.exe"
+$Python = Get-AiraPythonPath
+$MaxBatch = Get-AiraMaxBatch $MaxBatch
 $AllowedVisualCandidateAlgorithm = "tutorial_centerline_qbird"
+
+if (-not (Test-Path -LiteralPath $MaxBatch -PathType Leaf)) {
+    throw "3dsmaxbatch.exe not found: $MaxBatch. Run server\setup_local.ps1 or set AIRA_MAXBATCH."
+}
 
 if ($GuideAlgorithm -ne $AllowedVisualCandidateAlgorithm) {
     throw "Guide algorithm '$GuideAlgorithm' is disabled. Legacy algorithm scoring is blocked; use '$AllowedVisualCandidateAlgorithm' only as a visual candidate generator, then rely on Semantic Skin Review and human visual signoff."
@@ -48,7 +56,7 @@ if ([string]::IsNullOrWhiteSpace($AssetName)) {
 
 $SafeAssetName = ($AssetName -replace '[\\/:*?"<>|]', '_')
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
-    $OutDir = Join-Path $ToolRoot "out"
+    $OutDir = Get-AiraOutDir
 }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null

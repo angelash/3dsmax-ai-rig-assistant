@@ -132,6 +132,8 @@ Biped 的肩、肘、胯、膝、踝等节点会受 Character Studio Figure Mode
 
 当前自动批处理会在证据包生成后重跑最终 Skin gate：有 `-VisualSignoffJson` 时使用本地签核；没有签核时保持阻断。工程不再调用外部视觉 API。即使旧 JSON 字段里保留了诊断分数，只要签核缺失、schema 不完整、任何必要项不是 `pass`，`semanticSkinReady`、`stage01HandoffReady`、`skinSetupReady` 和 `productionReady` 仍会保持 false。报告会列出 MDC 本地代理清单：front/side/top 包裹性、身体中心链、腿/脚 pivot、锁骨/肩肘腕/手团中心线、短脖子大头、以及需要延后的冠饰、喙、布料、武器、翅膀或手指细节骨。
 
+传入本地签核后，`server/mdc_visual_correction_plan.py` 会把未通过项转换为下一轮修正计划：脚/踝/膝/髋使用本地点云解剖目标，手臂/手团使用 `visual_qc` 的中心线覆盖目标。计划只输出受限候选，不直接放行；每次应用后都必须重新跑 CT、生成证据图并由 MDC 本地代理复看。
+
 ## 7. 本地视觉轮廓自检
 
 当前已增加第一版视觉自检，但它不是外部视觉大模型。

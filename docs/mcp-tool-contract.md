@@ -210,6 +210,8 @@
   "visualSignoffJson": "",
   "visualReviewStatus": "awaiting_local_signoff",
   "visualReviewMessage": "Visual evidence pack generated; provide -VisualSignoffJson after MDC local-agent image review.",
+  "mdcVisualCorrectionPlanJson": "",
+  "mdcVisualCorrectionPlanMarkdown": "",
   "wireBoneScreenshotDir": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/wire_bone_screenshots",
   "stage01SkinPrepGateJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/data/luxun_model_stage01_skin_prep_gate.json",
   "rigAssetQcJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/data/luxun_model_stage01_rig_asset_qc.json"
@@ -221,6 +223,8 @@
 `textureSidecar` 指向与工作 FBX/Max 场景同目录保存的 `.fbm` 贴图目录。批处理会把源 FBX 旁边的 `.fbm` 复制进 run，并在 3ds Max 导入后按文件名把 bitmap 贴图改为相对路径，避免旧机器上的绝对路径继续污染 Asset QC。
 
 `visualReviewManifest` / `visualReviewInput` / `visualReviewSchema` 指向 run 内的视觉语义证据包。它包含全局证据图、头/手/脚/骨盆局部裁剪和结构化 blocker 审查 schema，不输出质量分。schema 里的必要项包括 `frontWrap`、`sideWrap`、`topWrap`、`legClothingOcclusion`、左右 foot pivot 等；这些不是备注，未通过会阻断 Skin 前置门。
+
+`mdcVisualCorrectionPlanJson` / `mdcVisualCorrectionPlanMarkdown` 在传入 `visual_signoff_json` 后生成。它把 MDC 本地代理看到的 blocker 转成有来源、有目标、有步长限制的 Guide/Biped 修正候选；它不是自动放行，应用后仍必须重新跑 CT、截图证据和 MDC 复看。
 
 `wireBoneScreenshotDir` 指向 3ds Max 技术视图截图目录。这里的 front / side / top PNG 使用线框材质叠加 Biped 骨段和 guide，用来直观看侧面重心、腰部原点、头/帽分离和骨骼粗细。
 

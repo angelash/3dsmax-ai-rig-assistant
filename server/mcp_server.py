@@ -269,6 +269,8 @@ def stage01_rig_fbx_file(
         "visualSignoffJson": visual_signoff_json,
         "visualReviewStatus": "awaiting_local_signoff" if not visual_signoff_json else "local_signoff_used",
         "visualReviewMessage": "Provide visual_signoff_json after MDC local-agent image review.",
+        "mdcVisualCorrectionPlanJson": "",
+        "mdcVisualCorrectionPlanMarkdown": "",
         "wireBoneScreenshotDir": str(out_dir / "runs" / output_name / "wire_bone_screenshots"),
         "rigAssetQcJson": str(out_dir / f"{output_name}_stage01_rig_asset_qc.json"),
         "rigAssetQcMarkdown": str(out_dir / f"{output_name}_stage01_rig_asset_qc.md"),

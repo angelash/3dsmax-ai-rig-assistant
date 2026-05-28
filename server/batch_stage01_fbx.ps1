@@ -25,6 +25,7 @@ $ToolRoot = $AiraConfig.toolRoot
 $BatchScript = Join-Path $ToolRoot "maxscript\batch_stage01_fbx_test.ms"
 $VisualQcScript = Join-Path $ToolRoot "server\visual_qc.py"
 $VisualReviewPackScript = Join-Path $ToolRoot "server\visual_review_pack.py"
+$VisualCorrectionPlanScript = Join-Path $ToolRoot "server\mdc_visual_correction_plan.py"
 $RigDetailReviewScript = Join-Path $ToolRoot "server\rig_detail_review.py"
 $SkinPrepGateScript = Join-Path $ToolRoot "server\stage01_skin_prep_gate.py"
 $OrganizeOutScript = Join-Path $ToolRoot "server\organize_out_dir.py"
@@ -393,6 +394,37 @@ if ((Test-Path -LiteralPath $SkinPrepGateScript) -and (Test-Path -LiteralPath $O
     $OrganizedSkinPrepGateMarkdown = Resolve-AiraOutputPath "reports" "$SafeAssetName`_stage01_skin_prep_gate.md" $SkinPrepGateMarkdown
 }
 
+$OrganizedVisualCorrectionPlanJson = ""
+$OrganizedVisualCorrectionPlanMarkdown = ""
+if (
+    (Test-Path -LiteralPath $VisualCorrectionPlanScript) -and
+    (Test-Path -LiteralPath $OrganizedVisualSnapshotJson) -and
+    (Test-Path -LiteralPath $OrganizedVisualQcJson) -and
+    (-not [string]::IsNullOrWhiteSpace($EffectiveVisualSignoffJson))
+) {
+    if (-not (Test-Path -LiteralPath $Python)) {
+        $Python = "python"
+    }
+    $CorrectionDataDir = Join-Path $RunDir "data"
+    $CorrectionReportDir = Join-Path $RunDir "reports"
+    New-Item -ItemType Directory -Force -Path $CorrectionDataDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $CorrectionReportDir | Out-Null
+
+    $CorrectionArgs = @(
+        $VisualCorrectionPlanScript,
+        $OrganizedVisualSnapshotJson,
+        "--asset-name", $SafeAssetName,
+        "--visual-qc-json", $OrganizedVisualQcJson,
+        "--visual-signoff-json", $EffectiveVisualSignoffJson,
+        "--slice-analysis-json", $OrganizedSliceAnalysisJson,
+        "--out-dir", $CorrectionDataDir,
+        "--md-out-dir", $CorrectionReportDir
+    )
+    & $Python @CorrectionArgs | Out-Null
+    $OrganizedVisualCorrectionPlanJson = Resolve-AiraOutputPath "data" "$SafeAssetName`_mdc_visual_correction_plan.json" (Join-Path $CorrectionDataDir "$SafeAssetName`_mdc_visual_correction_plan.json")
+    $OrganizedVisualCorrectionPlanMarkdown = Resolve-AiraOutputPath "reports" "$SafeAssetName`_mdc_visual_correction_plan.md" (Join-Path $CorrectionReportDir "$SafeAssetName`_mdc_visual_correction_plan.md")
+}
+
 $NumberedLayout = $null
 $LayoutVersion = "legacy_unordered"
 if ((Test-Path -LiteralPath $NumberedLayoutScript) -and (Test-Path -LiteralPath $RunDir)) {
@@ -451,6 +483,8 @@ $OrganizedVisualReviewSchema = Convert-AiraNumberedLayoutPath $OrganizedVisualRe
 $EffectiveVisualSignoffJson = Convert-AiraNumberedLayoutPath $EffectiveVisualSignoffJson
 $OrganizedSkinPrepGateJson = Convert-AiraNumberedLayoutPath $OrganizedSkinPrepGateJson
 $OrganizedSkinPrepGateMarkdown = Convert-AiraNumberedLayoutPath $OrganizedSkinPrepGateMarkdown
+$OrganizedVisualCorrectionPlanJson = Convert-AiraNumberedLayoutPath $OrganizedVisualCorrectionPlanJson
+$OrganizedVisualCorrectionPlanMarkdown = Convert-AiraNumberedLayoutPath $OrganizedVisualCorrectionPlanMarkdown
 $OrganizedRigAssetQcJson = Convert-AiraNumberedLayoutPath $OrganizedRigAssetQcJson
 $OrganizedRigAssetQcMarkdown = Convert-AiraNumberedLayoutPath $OrganizedRigAssetQcMarkdown
 
@@ -486,6 +520,8 @@ $OrganizedRigAssetQcMarkdown = Convert-AiraNumberedLayoutPath $OrganizedRigAsset
     visualSignoffJson = $EffectiveVisualSignoffJson
     visualReviewStatus = $VisualReviewStatus
     visualReviewMessage = $VisualReviewMessage
+    mdcVisualCorrectionPlanJson = $OrganizedVisualCorrectionPlanJson
+    mdcVisualCorrectionPlanMarkdown = $OrganizedVisualCorrectionPlanMarkdown
     stage01SkinPrepGateJson = $OrganizedSkinPrepGateJson
     stage01SkinPrepGateMarkdown = $OrganizedSkinPrepGateMarkdown
     rigAssetQcJson = $OrganizedRigAssetQcJson

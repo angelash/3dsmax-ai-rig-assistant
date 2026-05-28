@@ -162,6 +162,8 @@ visual_screenshots/<asset>/*_top.png
 
 离线流程还会生成 `visual_review/` 证据包：全局前/侧/顶图、head/pelvis/hand/foot 局部裁剪、`review_input.md` 和 `review_schema.json`。这个包用于 MDC 本地代理输出结构化 blocker，不产生质量分。批处理不会调用外部视觉 API；传 `visual_signoff_json` / `-VisualSignoffJson` 可使用已完成的本地签核。
 
+传入本地签核后，流程还会生成 `*_mdc_visual_correction_plan.json` / `.md`。这份计划把 MDC 视觉 blocker 转成受限的 Guide/Biped 修正候选，包括目标点、偏移量、单步上限和复检要求；它只是下一轮修正输入，不能跳过 CT、重新截图和 MDC 复看。
+
 Biped 机械拟合不是单次写入。离线流程会按 Fit QC 偏差循环调整：先根据 Guide 段长缩放 Biped，再按教程层级顺序重新定位，直到无 fit failure 或达到 `max_fit_iterations` / `-MaxFitIterations` 上限。未收敛时 Skin gate 会继续阻断。
 
 旧 benchmark 曾写入：

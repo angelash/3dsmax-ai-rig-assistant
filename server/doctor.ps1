@@ -103,12 +103,7 @@ if (Test-Path -LiteralPath $Config.python -PathType Leaf) {
     }
 }
 
-if ([string]::IsNullOrWhiteSpace($env:OPENAI_API_KEY)) {
-    Add-AiraCheck "openai_api_key" "warning" "OPENAI_API_KEY is not set; VLM review will be skipped unless external signoff JSON is provided." "OPENAI_API_KEY"
-}
-else {
-    Add-AiraCheck "openai_api_key" "ok" "OPENAI_API_KEY is set." "OPENAI_API_KEY"
-}
+Add-AiraCheck "local_visual_signoff" "ok" "Stage01 uses local evidence packs and caller-provided visual signoff JSON; no API key is required." "visual_review/review_schema.json"
 
 if ($CheckBridge.IsPresent -and (Test-Path -LiteralPath $Config.python -PathType Leaf)) {
     $Cli = Join-Path $Config.toolRoot "server\direct_cli.py"

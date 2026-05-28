@@ -10,9 +10,9 @@ Stage01 output is only a Biped candidate until front, side and top wrapping are 
 - `frontWrap`, `sideWrap`, `topWrap`, `rootPelvisPolicy`, `crossSectionInsideVolume`, `legClothingOcclusion`, left/right hand detail and left/right foot pivot checks must all be `pass`.
 - `needs_detail`, `uncertain`, `not_visible` and `blocker` are blocking states.
 - Numeric fit diagnostics and generated screenshots are evidence, not approval.
-- VLM output is evidence/signoff input only; the Skin gate still validates the schema and every required check.
+- MDC local-agent output is evidence/signoff input only; the Skin gate still validates the schema and every required check.
 - Biped mechanical fit must converge after the evidence feedback loop, but mechanical convergence alone is not Skin-ready.
-- Skin setup starts only after `semanticSkinReady=true`, `stage01HandoffReady=true`, and the manual/VLM signoff is recorded.
+- Skin setup starts only after `semanticSkinReady=true`, `stage01HandoffReady=true`, and the MDC local-agent signoff is recorded.
 
 ## Review Standard
 
@@ -26,8 +26,8 @@ Stage01 output is only a Biped candidate until front, side and top wrapping are 
 
 ## Required Output
 
-Fill `visual_review/semantic_visual_review_template.json` using `visual_review/review_schema.json`, or provide an equivalent VLM JSON to `stage01_skin_prep_gate.py --visual-signoff-json`.
+Fill `visual_review/semantic_visual_review_template.json` using `visual_review/review_schema.json`, or provide an equivalent local signoff JSON to `stage01_skin_prep_gate.py --visual-signoff-json`.
 
-`batch_stage01_fbx.ps1` will also run the optional VLM review automatically after building the evidence pack when `OPENAI_API_KEY` is set. Use `-SkipVlmReview` to force a human-only blocked handoff, or `-VisualSignoffJson` to provide a pre-reviewed JSON file.
+`batch_stage01_fbx.ps1` never calls an external vision API. It builds the evidence pack and blocks until `-VisualSignoffJson` points to a reviewed JSON file.
 
-Do not describe a run as Skin-ready unless the signoff JSON approves `stage01HandoffRecommendation=approve_for_manual_skin_setup` and all required checks are `pass`.
+Do not describe a run as Skin-ready unless the signoff JSON approves `stage01HandoffRecommendation=approve_for_mdc_skin_setup` and all required checks are `pass`.

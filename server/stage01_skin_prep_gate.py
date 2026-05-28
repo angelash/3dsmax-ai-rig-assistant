@@ -40,6 +40,30 @@ def add_blocker(blockers: list[dict[str, str]], code: str, message: str, owner: 
     blockers.append({"code": code, "owner": owner, "message": message})
 
 
+MDC_SEMANTIC_RISK_OVERRIDES: dict[str, dict[str, str]] = {
+    "multiview_wrap_signoff_required": {
+        "owner": "mdc_agent",
+        "message": "Generated guides and numeric Biped diagnostics do not prove front/side/top wrapping. The MDC local visual agent must inspect the wire-bone views before Skin setup.",
+        "suggestedAction": "Review front, side and top wire-bone screenshots plus pelvis, hand and foot crops. Approve only when the Biped centerline, limb pivots and foot/toe direction sit inside the visible model volume in all relevant views.",
+    },
+    "leg_landmarks_may_be_clothing_occluded": {
+        "owner": "mdc_agent",
+        "message": "Wide lower-body clothing can hide the true hip/knee/ankle chain; a mechanically fitted Biped may still be following the robe or skirt silhouette instead of the leg anatomy.",
+        "suggestedAction": "Use front, side and top wire-bone views plus foot crops and knee/ankle cross sections. Approve only if hips, knees and ankles follow the under-clothing leg chain and visible boot/foot pivots, not the garment edge.",
+    },
+}
+
+
+def normalize_mdc_review_payload(risk: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(risk)
+    if normalized.get("severity") == "skin_blocker":
+        normalized["owner"] = "mdc_agent"
+    override = MDC_SEMANTIC_RISK_OVERRIDES.get(str(normalized.get("code", "")))
+    if override:
+        normalized.update(override)
+    return normalized
+
+
 REQUIRED_SIGNOFF_TOP_LEVEL = [
     "assetName",
     "decisionPolicy",
@@ -67,7 +91,7 @@ REQUIRED_SIGNOFF_CHECKS = [
 ]
 
 ALLOWED_SIGNOFF_STATUSES = {"pass", "blocker", "needs_detail", "uncertain", "not_visible"}
-ALLOWED_SIGNOFF_RECOMMENDATIONS = {"approve_for_manual_skin_setup", "block_until_fixed", "needs_more_views"}
+ALLOWED_SIGNOFF_RECOMMENDATIONS = {"approve_for_mdc_skin_setup", "block_until_fixed", "needs_more_views"}
 
 
 def evaluate_multiview_signoff(visual_signoff: dict[str, Any]) -> dict[str, Any]:
@@ -127,7 +151,7 @@ def evaluate_multiview_signoff(visual_signoff: dict[str, Any]) -> dict[str, Any]
         schema_issues.append("notes must be an array")
 
     schema_valid = not schema_issues
-    ready = schema_valid and recommendation == "approve_for_manual_skin_setup" and not missing and not failed
+    ready = schema_valid and recommendation == "approve_for_mdc_skin_setup" and not missing and not failed
     return {
         "available": True,
         "ready": ready,
@@ -152,7 +176,7 @@ def analyze(
     rig_asset_qc: dict[str, Any],
     slice_analysis: dict[str, Any],
     visual_signoff: dict[str, Any],
-    manual_semantic_confirmed: bool,
+    mdc_semantic_confirmed: bool,
     skin_weights_complete: bool,
 ) -> dict[str, Any]:
     skeleton = rig_asset_qc.get("skeleton", {})
@@ -176,7 +200,9 @@ def analyze(
     semantic_risks = semantic_skin_review.get("risks", [])
     multiview_signoff = evaluate_multiview_signoff(visual_signoff)
     raw_semantic_skin_blockers = [
-        risk for risk in semantic_risks if isinstance(risk, dict) and risk.get("severity") == "skin_blocker"
+        normalize_mdc_review_payload(risk)
+        for risk in semantic_risks
+        if isinstance(risk, dict) and risk.get("severity") == "skin_blocker"
     ]
     semantic_skin_blockers = [
         risk
@@ -188,7 +214,7 @@ def analyze(
     ]
     semantic_policy_ready = not semantic_skin_blockers
     semantic_skin_ready = semantic_policy_ready and multiview_signoff["ready"] and biped_fit_ready and ct_wrap_ready
-    semantic_confirmed = manual_semantic_confirmed or multiview_signoff["ready"]
+    semantic_confirmed = mdc_semantic_confirmed or multiview_signoff["ready"]
     has_skin = skeleton.get("hasSkin") is True
     skin_influence_ready = (
         has_skin
@@ -244,22 +270,22 @@ def analyze(
             add_blocker(
                 blockers,
                 "multiview_wrap_signoff_failed",
-                f"Human/VLM multiview review did not approve front/side/top wrapping. Failed or non-pass checks: {failed_names}. Schema issues: {schema_issue_text}.",
-                "human_or_vlm",
+                f"MDC local-agent multiview review did not approve front/side/top wrapping. Failed or non-pass checks: {failed_names}. Schema issues: {schema_issue_text}.",
+                "mdc_agent",
             )
         else:
             add_blocker(
                 blockers,
                 "multiview_wrap_signoff_missing",
                 "Front, side and top wire-bone screenshots must be reviewed for wrapping before the Stage01 candidate can enter Skin setup.",
-                "human_or_vlm",
+                "mdc_agent",
             )
     if not semantic_confirmed:
         add_blocker(
             blockers,
             "semantic_confirmation_required",
-            "A human rigger or VLM still needs to confirm the estimated guide landmarks against the mesh before Skin.",
-            "human_or_vlm",
+            "The MDC local visual agent still needs to confirm the estimated guide landmarks against the mesh before Skin.",
+            "mdc_agent",
         )
     if not has_skin:
         add_blocker(blockers, "skin_modifier_missing", "No Skin modifier exists yet; this is expected for Stage01 but blocks production delivery.")
@@ -271,11 +297,11 @@ def analyze(
         add_blocker(blockers, "absolute_texture_paths", "Texture paths are absolute and should be localized before delivery.", "asset")
 
     prep_warnings: list[dict[str, str]] = []
-    if multiview_signoff["ready"] and not manual_semantic_confirmed:
+    if multiview_signoff["ready"] and not mdc_semantic_confirmed:
         prep_warnings.append(
             {
-                "code": "human_review_recommended_after_vlm",
-                "message": "VLM signoff can clear Stage01 handoff, but a human rigger should still spot-check the scene before final production delivery.",
+                "code": "mdc_followup_recommended_after_agent_signoff",
+                "message": "MDC signoff cleared Stage01 handoff; keep the same local-agent evidence pack attached for downstream production review.",
             }
         )
     if transform.get("centeredXY") is False:
@@ -301,7 +327,7 @@ def analyze(
         .get("bipedStructure", {})
         .get("handDetail", "unknown")
     )
-    manual_checklist = [
+    mdc_checklist = [
         {
             "id": "open_scene_and_screenshots",
             "status": "done" if multiview_signoff["ready"] else "required",
@@ -366,14 +392,14 @@ def analyze(
             "note": "Continue guide/Biped correction until strict CT-style slice analysis has zero unwrapped samples.",
         },
         {
-            "id": "manual_landmark_signoff",
+            "id": "mdc_landmark_signoff",
             "status": status(semantic_confirmed),
-            "note": "Required because current guides are generated from mesh-profile and centerline estimates. Can be satisfied by a passing human/VLM visual signoff.",
+            "note": "Required because current guides are generated from mesh-profile and centerline estimates. Can be satisfied by a passing MDC local-agent visual signoff.",
         },
         {
             "id": "multiview_wrap_signoff",
             "status": status(multiview_signoff["ready"]),
-            "note": "Required human/VLM review of front, side and top wrapping. A generated candidate is not accepted without this signoff.",
+            "note": "Required MDC local-agent review of front, side and top wrapping. A generated candidate is not accepted without this signoff.",
         },
         {
             "id": "resolve_semantic_skin_blockers",
@@ -383,7 +409,7 @@ def analyze(
         {
             "id": "add_skin_modifier",
             "status": status(has_skin, pending=skin_setup_ready and not has_skin),
-            "note": "Add Skin to the character mesh only after manual semantic signoff.",
+            "note": "Add Skin to the character mesh only after MDC semantic signoff.",
         },
         {
             "id": "add_biped_bones_to_skin",
@@ -417,7 +443,7 @@ def analyze(
         "stage01HandoffReady": stage01_handoff_ready,
         "skinSetupReady": skin_setup_ready,
         "productionReady": production_ready,
-        "manualSemanticConfirmed": manual_semantic_confirmed,
+        "mdcSemanticConfirmed": mdc_semantic_confirmed,
         "semanticConfirmed": semantic_confirmed,
         "skinWeightsComplete": skin_weights_complete,
         "readiness": {
@@ -463,7 +489,7 @@ def analyze(
                 "verticesChecked": skeleton.get("verticesChecked"),
             },
         },
-        "manualSemanticChecklist": manual_checklist,
+        "mdcSemanticChecklist": mdc_checklist,
         "skinPrepTasks": skin_tasks,
         "semanticSkinBlockers": semantic_skin_blockers,
         "productionBlockers": blockers,
@@ -473,11 +499,11 @@ def analyze(
             if stage01_candidate_available and not biped_fit_ready
             else "Biped candidate exists, but CT-style slice wrapping reports unwrapped joints/segments that must be corrected."
             if stage01_candidate_available and biped_fit_ready and not ct_wrap_ready
-            else "Visual candidate exists, but front/side/top wrapping has not been approved by human/VLM review."
+            else "Visual candidate exists, but front/side/top wrapping has not been approved by MDC local-agent review."
             if stage01_candidate_available and not multiview_signoff["ready"]
             else "Visual candidate exists, but semantic Skin blockers must be resolved before Skin setup."
             if stage01_candidate_available and not semantic_policy_ready
-            else "Visual candidate exists and has no semantic blockers; human or VLM visual signoff is still required before Skin setup."
+            else "Visual candidate exists and has no semantic blockers; MDC local-agent visual signoff is still required before Skin setup."
             if stage01_candidate_available and semantic_policy_ready and not semantic_confirmed
             else "Required visual candidate outputs are missing."
             if not stage01_candidate_available
@@ -556,8 +582,8 @@ def write_markdown(qc: dict[str, Any], inputs: dict[str, str], md_path: Path) ->
     )
     lines.append(f"| Skin influence QC | `{skin['ready']}` | `{skin_state}` | `post_skin_delivery_gate` |")
 
-    lines += ["", "## Manual Semantic Checklist", ""]
-    for item in qc["manualSemanticChecklist"]:
+    lines += ["", "## MDC Semantic Checklist", ""]
+    for item in qc["mdcSemanticChecklist"]:
         mark = "x" if item["status"] == "done" else " "
         lines.append(f"- [{mark}] `{item['id']}`: {item['check']}")
 
@@ -610,7 +636,7 @@ def main() -> int:
     parser.add_argument("--visual-signoff-json", default="")
     parser.add_argument("--out-dir", default="")
     parser.add_argument("--md-out-dir", default="")
-    parser.add_argument("--manual-semantic-confirmed", action="store_true")
+    parser.add_argument("--mdc-semantic-confirmed", action="store_true")
     parser.add_argument("--skin-weights-complete", action="store_true")
     args = parser.parse_args()
 
@@ -645,7 +671,7 @@ def main() -> int:
         rig_asset_qc=rig_asset_qc,
         slice_analysis=slice_analysis,
         visual_signoff=visual_signoff,
-        manual_semantic_confirmed=args.manual_semantic_confirmed,
+        mdc_semantic_confirmed=args.mdc_semantic_confirmed,
         skin_weights_complete=args.skin_weights_complete,
     )
     inputs = {

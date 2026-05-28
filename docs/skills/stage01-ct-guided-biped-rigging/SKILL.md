@@ -83,7 +83,7 @@ Stop and report instead of forcing a fake pass when:
 - A Biped structural constraint prevents the required node/length/orientation change.
 - The point cloud does not expose the hidden anatomy well enough to decide.
 - The visible mesh is cloth/armor only and the underlying joint cannot be inferred confidently.
-- Reference answer comparison conflicts with mesh evidence and needs a human decision.
+- Reference answer comparison conflicts with mesh evidence and needs an MDC decision.
 
 The report must list the unresolved segment, failed stations, attempted fixes, evidence added, whether each attempt was positive or negative, and the exact question to ask.
 
@@ -108,4 +108,4 @@ Scripts must not:
 - A red CT slice is not a cosmetic issue; it blocks Stage01 handoff.
 - Internal Max refinement metrics are diagnostic only. The strict Python CT slice gate is the handoff blocker.
 - The right answer in research phase is often a clear blocker report, not another blind iteration.
-- Each run must leave a learning trail: what improved, what regressed, what should become a tool, and what question still needs human/reference confirmation.
+- Each run must leave a learning trail: what improved, what regressed, what should become a tool, and what question still needs MDC/reference confirmation.

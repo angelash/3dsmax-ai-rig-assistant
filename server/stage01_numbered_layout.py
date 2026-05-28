@@ -20,7 +20,7 @@ STEPS: list[dict[str, Any]] = [
         "phase": "输入工作副本与候选骨架场景",
         "does": "保存 3ds Max batch 使用的 ASCII-safe FBX 工作副本、贴图 sidecar，以及已经生成 Guide 和候选 Biped 的 .max 场景。",
         "read": "打开 .max 看真实 3ds Max 场景；FBX/FBM 是批处理工作副本，不是原始资产目录。",
-        "use": "后续人工校正 Guide、重新拟合 Biped、进入 Stage02 Skin 时从这里拿场景。",
+        "use": "后续 MDC 校正 Guide、重新拟合 Biped、进入 Stage02 Skin 时从这里拿场景。",
         "misread": "这里的 Biped 是 Stage01 自动候选，不是参考答案骨架，也不是已完成蒙皮的生产结果。",
     },
     {
@@ -39,7 +39,7 @@ STEPS: list[dict[str, Any]] = [
         "title": "Stage01 structured data",
         "phase": "机器可读诊断数据",
         "does": "保存 body profile、Guide/Biped snapshot、机械贴合 QC、视觉 QC、细节审查、Skin gate 等 JSON。",
-        "read": "脚本或二次分析优先读这里；人工只需查关键字段：fitRefinement、missingGuides、fitFailures、stage01HandoffReady、skinSetupReady。",
+        "read": "脚本或二次分析优先读这里；MDC 只需查关键字段：fitRefinement、missingGuides、fitFailures、stage01HandoffReady、skinSetupReady。",
         "use": "生成报告、做参考答案比对、驱动下一步 gate 或自动复查。",
         "misread": "JSON 里的旧路径可能记录生成瞬间的位置，实际文件位置以本 README 和 layout manifest 为准。",
     },
@@ -47,7 +47,7 @@ STEPS: list[dict[str, Any]] = [
         "legacy": "reports",
         "numbered": "04_stage01_reports",
         "title": "Stage01 reports",
-        "phase": "人工可读报告",
+        "phase": "MDC 可读报告",
         "does": "保存 batch summary、body profile、fit QC、rig detail review、skin prep gate 等 Markdown。",
         "read": "从 batch summary 看本轮做了什么；从 skin prep gate 看能不能进入 Skin；从 fit QC 看机械贴合是否收敛。",
         "use": "给人快速判断当前候选骨架的状态、风险和下一步。",
@@ -60,7 +60,7 @@ STEPS: list[dict[str, Any]] = [
         "phase": "本地视觉 QC 三视图",
         "does": "保存由 visual_qc 根据 snapshot 绘制的 front/side/top 图，展示模型点云、Guide、候选骨架和局部偏差。",
         "read": "用于快速看 Guide/Biped 是否落在轮廓内部；这是投影示意图，不是 Max 真实视口。",
-        "use": "自动/人工初筛大偏移、左右不对称、外轮廓漂移。",
+        "use": "自动/MDC 初筛大偏移、左右不对称、外轮廓漂移。",
         "misread": "不要把它当作最终渲染图；真实骨骼视口证据看第 07 步。",
     },
     {
@@ -80,7 +80,7 @@ STEPS: list[dict[str, Any]] = [
         "phase": "真实 Max 技术视图",
         "does": "保存 3ds Max 线框 + Guide + 候选 Biped 的 front/side/top 技术截图。",
         "read": "这是判断候选 Biped 是否贴合体积的核心图；侧视看前后重心，顶视看深度，前视看左右和高度。",
-        "use": "人工 signoff、VLM 审查、定位骨盆/头/手/脚等高风险点。",
+        "use": "MDC 本地代理 signoff，定位骨盆/头/手/脚等高风险点。",
         "misread": "图里是真实创建的候选 Biped，但不是参考答案骨架，也没有证明 Skin 权重合格。",
     },
     {
@@ -90,7 +90,7 @@ STEPS: list[dict[str, Any]] = [
         "phase": "视觉语义审查证据包",
         "does": "整合全局图、头/手/脚/骨盆局部裁剪、贴图语义叠加、纹理/线框配对图、MR 式切片和审查 schema。",
         "read": "从 review_input.md 看审查问题；从 full/、regions/、semantic_analysis/、slices/ 看证据。",
-        "use": "给人工或 VLM 按固定 blocker 做多视角语义确认。",
+        "use": "给 MDC 本地代理按固定 blocker 做多视角语义确认。",
         "misread": "这里不输出产品级评分；它只帮助判断是否清除或保留 blocker。",
     },
     {
@@ -538,7 +538,7 @@ def write_run_readme(run_dir: Path, asset_name: str, signals: dict[str, Any], ar
         "",
         "## 额外补充",
         "",
-        "- 本目录保留 `layout_manifest.json`，记录旧目录到新编号目录的映射，方便脚本或人工追踪。",
+        "- 本目录保留 `layout_manifest.json`，记录旧目录到新编号目录的映射，方便脚本或 MDC 追踪。",
         "- 每个编号目录都有自己的 README，说明它的产物、上下文和常见误读。",
         "- 目录编号表达推荐操作/复查顺序；单个文件内部的生成时间仍以报告和日志为准。",
     ]

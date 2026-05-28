@@ -2779,6 +2779,23 @@ struct AIRAStage01Tool
         local traceItems = #()
         append traceItems ("start ordered_root_first strictCtFailures=" + (initialFailures as string) + ", maxCtOffset=" + (initialMax as string) + ", samples=" + (initialDiag[3] as string))
 
+        if maxIterations <= 0 do
+        (
+            local converged = (initialFailures == 0)
+            local traceText = ""
+            append traceItems "ct refinement skipped because maxIterations <= 0"
+            for i = 1 to traceItems.count do
+            (
+                traceText += traceItems[i]
+                if i < traceItems.count do traceText += " | "
+            )
+            setFitRefineProps bipRoot "ct_refinement_skipped" maxIterations 0 initialFailures initialFailures initialMax initialMax converged traceText
+            try(setUserProp bipRoot "AIRA_CTRefineGuideSyncCount" "0")catch()
+            try(setUserProp bipRoot "AIRA_CTRefineLockedSegments" "0")catch()
+            log ("Biped CT refinement skipped: maxIterations=" + (maxIterations as string) + ", initialFailures=" + (initialFailures as string) + ", converged=" + (converged as string))
+            return #(converged, 0, initialFailures, initialFailures, initialMax, initialMax, traceItems)
+        )
+
         local diag = initialDiag
         local iterations = 0
         local converged = (initialFailures == 0)

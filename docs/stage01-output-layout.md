@@ -1,6 +1,6 @@
 # Stage01 Output Layout
 
-这份文档定义 Stage01 单次运行产物的交付结构。目标是让后续人工复查、参考答案比对、自动学习校对和 Stage02 Skin 接入都能快速定位上下文。
+这份文档定义 Stage01 单次运行产物的交付结构。目标是让后续 MDC 复查、参考答案比对、自动学习校对和 Stage02 Skin 接入都能快速定位上下文。
 
 ## 需求分析
 
@@ -26,7 +26,7 @@
 | 01 | `01_scene_workspace/` | 工作 FBX、贴图 sidecar、Stage01 候选 Biped `.max` 场景 |
 | 02 | `02_generation_logs/` | 3ds Max batch/listener 原始日志 |
 | 03 | `03_stage01_data/` | body profile、visual snapshot、fit QC、gate 等 JSON |
-| 04 | `04_stage01_reports/` | 人工可读 Markdown 报告 |
+| 04 | `04_stage01_reports/` | MDC 可读 Markdown 报告 |
 | 05 | `05_qc_silhouette_views/` | visual_qc 根据 snapshot 画出的三视图 |
 | 06 | `06_textured_model_views/` | 3ds Max 带贴图视图 |
 | 07 | `07_wire_bone_technical_views/` | 3ds Max 线框 + Guide + 候选 Biped 技术视图 |

@@ -1067,7 +1067,7 @@ def review_schema() -> dict[str, Any]:
             },
             "stage01HandoffRecommendation": {
                 "type": "string",
-                "enum": ["approve_for_manual_skin_setup", "block_until_fixed", "needs_more_views"],
+                "enum": ["approve_for_mdc_skin_setup", "block_until_fixed", "needs_more_views"],
             },
             "notes": {"type": "array", "items": {"type": "string"}},
         },
@@ -1081,7 +1081,7 @@ def review_template(asset_name: str, images: dict[str, str]) -> dict[str, Any]:
     return {
         "assetName": asset_name,
         "decisionPolicy": "visual_semantic_gate_only",
-        "reviewer": "human_or_vlm",
+        "reviewer": "mdc_agent",
         "reviewedAt": "",
         "checks": {
             "rootPelvisPolicy": check(images.get("pelvis_front", ""), images.get("pelvis_side", ""), images.get("wire_bone_side", "")),
@@ -1531,7 +1531,7 @@ def main() -> int:
         "- `semantic_analysis/`: texture-only semantic evidence images, paired texture-vs-wire comparison images and machine-readable texture trace data.",
         "- `slices/`: MR-style cross sections for every exported Biped body-chain segment.",
         "- `../wire_bone_screenshots/`: 3ds Max wireframe + bone technical views referenced by this pack when available.",
-        "- `review_schema.json`: strict review output shape for human/VLM review.",
+        "- `review_schema.json`: strict review output shape for MDC local-agent review.",
         "- `semantic_visual_review_template.json`: blank review result to fill.",
         "- `review_input.md`: concise review prompt and evidence list.",
         "- `landmark_reasoning.md`: explains how texture evidence, real Max wire+bones and slices should be read together.",

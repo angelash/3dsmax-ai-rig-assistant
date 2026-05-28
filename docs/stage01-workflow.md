@@ -4,7 +4,7 @@
 
 `video-tutorials/BV1ftReBYEg3-01-biped-skeleton-and-matching.md`
 
-第一版不是全自动绑骨，而是“Guide 定位点 + Biped 自动创建/匹配 + 多视图证据包 + Skin gate”。这样更适合真实生产：AI 或脚本负责机械流程，人或 VLM 负责结构化视觉判断，最终 gate 负责拒绝不合格候选。
+第一版不是全自动绑骨，而是“Guide 定位点 + Biped 自动创建/匹配 + 多视图证据包 + Skin gate”。这样更适合真实生产：脚本负责机械流程，MDC 本地代理负责结构化视觉判断，最终 gate 负责拒绝不合格候选。
 
 当前实验研究期的默认启动规范是 `docs/stage01-self-learning-rigging-standard.md`，具体操作顺序以 `docs/skills/stage01-ct-guided-biped-rigging/SKILL.md` 为准：Agent 按教程从 Root/骨盆开始逐段控制、逐段 CT 校验并锁定；脚本只作为测量、切片、局部移动和报告工具，不能用固定迭代次数代替成功判断。每轮既要产出可复查候选，也要记录工具缺口、正负收益和下一步改进项。
 
@@ -41,7 +41,7 @@
 5. 手动拖动 `AIRA_GUIDE_*` 定位点到模型关节位置。Guide 只负责初始 Biped，不作为最终正确性的证明。
 6. 如果只调了左侧，点击 `Mirror L Guides To R`。
 7. 点击 `Create Biped From Guides`。
-8. 在 Figure Mode 中人工检查骨盆、腿、脚、躯干、手臂、脖子、头，并优先查看 `08_visual_review_evidence/slices/` 的 CT 切片。
+8. 在 Figure Mode 中由 MDC 检查骨盆、腿、脚、躯干、手臂、脖子、头，并优先查看 `08_visual_review_evidence/slices/` 的 CT 切片。
 9. 点击 `Validate / Report` 生成检查报告。
 10. 点击 `Save Stage01 File` 保存阶段文件。
 
@@ -95,8 +95,8 @@ AIRA_GUIDE_L_Toe
 
 - 手指只创建 Biped 结构，暂不逐指自动匹配。
 - 不自动创建耳机、背包、枪、炮等附属 Bones；那是第二篇范围。
-- Stage01 不自动添加 Skin，也不处理权重；批处理会生成 `*_stage01_skin_prep_gate.md`，说明进入 Skin 前还需要哪些人工/VLM 语义确认和权重准备。第三、四篇范围已独立为 `docs/stage02-skin-workflow.md` 和 `server/batch_stage02_skin.ps1`，不会回改 Stage01 绑骨逻辑。
-- Biped 节点贴合依赖 3ds Max 的 Biped IK 和 Figure Mode，有些节点可能需要人工微调；CT 修正是保守自动收敛，不会把未包裹切片伪装成通过。
+- Stage01 不自动添加 Skin，也不处理权重；批处理会生成 `*_stage01_skin_prep_gate.md`，说明进入 Skin 前还需要哪些 MDC 本地代理语义确认和权重准备。第三、四篇范围已独立为 `docs/stage02-skin-workflow.md` 和 `server/batch_stage02_skin.ps1`，不会回改 Stage01 绑骨逻辑。
+- Biped 节点贴合依赖 3ds Max 的 Biped IK 和 Figure Mode，有些节点可能需要 MDC 微调；CT 修正是保守自动收敛，不会把未包裹切片伪装成通过。
 - 离线 MCP/批处理入口已接入，但 Max 内部桥接仍只允许白名单工具函数，不接受任意 MaxScript。
 
 ## 适合接 MCP 的安全工具函数

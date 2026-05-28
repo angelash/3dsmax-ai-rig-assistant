@@ -741,7 +741,7 @@ def analyze(snapshot: dict[str, Any]) -> dict[str, Any]:
         "handCoverage": hand_coverage,
         "armCoverage": arm_coverage,
         "legOcclusion": leg_occlusion,
-        "semanticWarning": "This is local 2D silhouette QC, not a vision-language model verdict. Use exported screenshots for human or VLM review before skinning.",
+        "semanticWarning": "This is local 2D silhouette QC, not a visual signoff. Use exported screenshots for MDC local-agent review before skinning.",
     }
 
 

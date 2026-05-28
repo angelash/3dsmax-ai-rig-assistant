@@ -190,11 +190,9 @@ def stage01_rig_fbx_file(
     asset_name: str = "",
     guide_algorithm: str = "tutorial_centerline_qbird",
     visual_signoff_json: str = "",
-    skip_vlm_review: bool = False,
-    vlm_review_model: str = "",
     max_fit_iterations: int = 12,
 ) -> dict[str, Any]:
-    """Run offline Stage01 guide, Biped creation, visual review, and Skin-prep gate for a local FBX file."""
+    """Run offline Stage01 guide, Biped creation, local visual evidence, and Skin-prep gate for a local FBX file."""
 
     source = Path(fbx_path)
     if not source.exists():
@@ -204,7 +202,7 @@ def stage01_rig_fbx_file(
     if guide_algorithm not in allowed_algorithms:
         raise ValueError(
             "Legacy guide algorithms and score-ranked recommendations are disabled. "
-            "Use tutorial_centerline_qbird only as a visual candidate generator, then rely on Semantic Skin Review and human visual signoff."
+            "Use tutorial_centerline_qbird only as a visual candidate generator, then rely on Semantic Skin Review and MDC visual signoff."
         )
 
     safe_asset_name = asset_name or source.stem
@@ -229,10 +227,6 @@ def stage01_rig_fbx_file(
         if not signoff.exists():
             raise FileNotFoundError(f"Visual signoff JSON not found: {visual_signoff_json}")
         cmd.extend(["-VisualSignoffJson", str(signoff)])
-    if skip_vlm_review:
-        cmd.append("-SkipVlmReview")
-    if vlm_review_model:
-        cmd.extend(["-VlmReviewModel", vlm_review_model])
 
     completed = subprocess.run(
         cmd,
@@ -273,8 +267,8 @@ def stage01_rig_fbx_file(
         "visualReviewInput": str(out_dir / "runs" / output_name / "visual_review" / "review_input.md"),
         "visualReviewSchema": str(out_dir / "runs" / output_name / "visual_review" / "review_schema.json"),
         "visualSignoffJson": visual_signoff_json,
-        "vlmReviewJson": str(out_dir / "runs" / output_name / "visual_review" / f"{output_name}_semantic_visual_review_vlm.json"),
-        "vlmReviewStatus": "unknown",
+        "visualReviewStatus": "awaiting_local_signoff" if not visual_signoff_json else "local_signoff_used",
+        "visualReviewMessage": "Provide visual_signoff_json after MDC local-agent image review.",
         "wireBoneScreenshotDir": str(out_dir / "runs" / output_name / "wire_bone_screenshots"),
         "rigAssetQcJson": str(out_dir / f"{output_name}_stage01_rig_asset_qc.json"),
         "rigAssetQcMarkdown": str(out_dir / f"{output_name}_stage01_rig_asset_qc.md"),

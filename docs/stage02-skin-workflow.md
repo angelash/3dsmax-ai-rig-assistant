@@ -24,7 +24,7 @@ Stage02 对应教程第三、四篇：
 | Reference Weight Collapse | 可选读取已蒙皮参考 FBX，把参考 Skin 权重按语义压缩到当前简化 Biped 变形骨 |
 | Remove Zero Weights | 可用时调用 Skin 的清理 0 权重操作 |
 | Deformation Smoke Test | 从 Stage02 场景自动摆基础测试 pose，输出三视图截图、位移统计和 posed scene |
-| Stage02 Report | 输出 JSON/Markdown，明确标记还需人工变形测试和权重细刷 |
+| Stage02 Report | 输出 JSON/Markdown，明确标记还需 MDC 变形测试和权重细刷 |
 
 ## 执行方式
 
@@ -68,7 +68,7 @@ $repo = (Resolve-Path .).Path
   -AssetName luxun_model_refcollapse
 ```
 
-它会测试 `bind`、`head_turn`、`left_arm_raise`、`right_elbow_bend`、`left_knee_bend`、`right_foot_roll`、`torso_twist`，每个 pose 输出 front/side/top 截图、posed `.max` 场景和逐顶点位移统计。这个测试能发现明显无跟随、顶点非法、位移爆炸等硬问题；截图仍需要按教程第四篇做人工或视觉签核。
+它会测试 `bind`、`head_turn`、`left_arm_raise`、`right_elbow_bend`、`left_knee_bend`、`right_foot_roll`、`torso_twist`，每个 pose 输出 front/side/top 截图、posed `.max` 场景和逐顶点位移统计。这个测试能发现明显无跟随、顶点非法、位移爆炸等硬问题；截图仍需要按教程第四篇做 MDC 视觉签核。
 
 ## 输出
 
@@ -110,10 +110,10 @@ out/stage02_deform_tests/<assetName>__YYYYMMDD_HHMMSS/
 
 - 第一版权重是初始权重，不是商用品质最终权重。
 - 参考权重压缩要求目标模型和参考 FBX 顶点顺序一致；如果拓扑不同，只能把它当作失败并回退到启发式初始权重。
-- 道具/附件如果没有独立语义骨骼映射，会先按最近 Biped 段获得初始影响；炮、枪、背包、耳机等刚性道具仍需要后续专门规则或人工刷成 `1`。
-- 身体、头颈、肩、腕、腿、脚需要按教程第四篇做临时动作测试和人工细刷。
+- 道具/附件如果没有独立语义骨骼映射，会先按最近 Biped 段获得初始影响；炮、枪、背包、耳机等刚性道具仍需要后续专门规则或 MDC 刷成 `1`。
+- 身体、头颈、肩、腕、腿、脚需要按教程第四篇做临时动作测试和 MDC 细刷。
 - 自动动作测试只标记 smoke test 是否有硬错误，不会单独把 `deformationTestComplete` 或 `productionReady` 改成 true。
-- `skinWeightsComplete=false`、`deformationTestComplete=false`、`productionReady=false` 会保持到人工/动画测试完成。
+- `skinWeightsComplete=false`、`deformationTestComplete=false`、`productionReady=false` 会保持到 MDC/动画测试完成。
 
 ## 规则继承
 

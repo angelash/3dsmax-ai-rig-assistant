@@ -96,7 +96,7 @@
   "biped_root": "AIRA_Biped_COM",
   "fit_nodes": 23,
   "warnings": [
-    "Manual inspection is still required for hands, fingers and feet."
+    "MDC inspection is still required for hands, fingers and feet."
   ]
 }
 ```
@@ -180,15 +180,13 @@
   "asset_name": "luxun_model",
   "guide_algorithm": "tutorial_centerline_qbird",
   "visual_signoff_json": "",
-  "skip_vlm_review": false,
-  "vlm_review_model": "",
   "max_fit_iterations": 12
 }
 ```
 
 `guide_algorithm` 只允许 `tutorial_centerline_qbird`。旧算法和分数排序推荐已经屏蔽，不能再通过 MCP 作为生产入口。
 
-`visual_signoff_json` 可传入人工或外部 VLM 已填好的 `review_schema.json` 兼容签核文件；`skip_vlm_review=true` 会跳过自动 VLM 复核；`vlm_review_model` 可覆盖默认视觉模型。未传签核且没有 `OPENAI_API_KEY` 时，Stage01 仍会产出证据包，但 Skin gate 会保持阻断。
+`visual_signoff_json` 可传入 MDC 本地代理已填好的 `review_schema.json` 兼容签核文件。未传签核时，Stage01 仍会产出证据包，但 Skin gate 会保持阻断；工程不会调用外部视觉 API。
 
 `max_fit_iterations` 控制 Biped 机械拟合的证据反馈循环上限。每轮会按 Fit QC 偏差先缩放 Biped 段长再重新定位；收敛记录写入 `fitQcJson.fitRefinement`。
 
@@ -209,17 +207,16 @@
   "visualReviewManifest": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/visual_review/luxun_model_visual_evidence_manifest.json",
   "visualReviewInput": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/visual_review/review_input.md",
   "visualReviewSchema": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/visual_review/review_schema.json",
-  "visualSignoffJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/visual_review/luxun_model_semantic_visual_review_vlm.json",
-  "vlmReviewJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/visual_review/luxun_model_semantic_visual_review_vlm.json",
-  "vlmReviewStatus": "completed",
-  "vlmReviewMessage": "VLM visual signoff JSON generated.",
+  "visualSignoffJson": "",
+  "visualReviewStatus": "awaiting_local_signoff",
+  "visualReviewMessage": "Visual evidence pack generated; provide -VisualSignoffJson after MDC local-agent image review.",
   "wireBoneScreenshotDir": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/wire_bone_screenshots",
   "stage01SkinPrepGateJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/data/luxun_model_stage01_skin_prep_gate.json",
   "rigAssetQcJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/data/luxun_model_stage01_rig_asset_qc.json"
 }
 ```
 
-`stage01SkinPrepGateJson` 汇总 Biped 贴合输出、视觉截图、逐骨诊断、Semantic Skin Review、front/side/top 包裹性签核和资产 QC。它用于说明为什么 Stage01 结果只是视觉候选，还不能进入生产交付：多视图包裹性未由人工或 VLM 按 schema 签核、语义阻塞项、语义确认、Skin Modifier、权重和变形检查未完成时，`semanticSkinReady=false`、`stage01HandoffReady=false`、`skinSetupReady=false`、`productionReady=false`。
+`stage01SkinPrepGateJson` 汇总 Biped 贴合输出、视觉截图、逐骨诊断、Semantic Skin Review、front/side/top 包裹性签核和资产 QC。它用于说明为什么 Stage01 结果只是视觉候选，还不能进入生产交付：多视图包裹性未由 MDC 本地代理按 schema 签核、语义阻塞项、语义确认、Skin Modifier、权重和变形检查未完成时，`semanticSkinReady=false`、`stage01HandoffReady=false`、`skinSetupReady=false`、`productionReady=false`。
 
 `textureSidecar` 指向与工作 FBX/Max 场景同目录保存的 `.fbm` 贴图目录。批处理会把源 FBX 旁边的 `.fbm` 复制进 run，并在 3ds Max 导入后按文件名把 bitmap 贴图改为相对路径，避免旧机器上的绝对路径继续污染 Asset QC。
 
@@ -271,7 +268,7 @@
 - 根据 Biped 段、左右侧、身高区域生成第一轮初始顶点权重。
 - 可选把参考答案 Skin 权重压缩到当前 Biped 语义骨，保留游戏侧简化骨骼数量。
 - 调用可用的 Remove Zero Weights。
-- 输出 `skinWeightsComplete=false`、`deformationTestComplete=false`、`productionReady=false`，直到人工权重细刷和动作测试完成。
+- 输出 `skinWeightsComplete=false`、`deformationTestComplete=false`、`productionReady=false`，直到 MDC 权重细刷和动作测试完成。
 
 输出：
 

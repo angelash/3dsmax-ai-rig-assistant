@@ -308,8 +308,8 @@ def semantic_skin_review(
     add_risk(
         "multiview_wrap_signoff_required",
         "skin_blocker",
-        "human_or_vlm",
-        "Generated guides and numeric Biped diagnostics do not prove front/side/top wrapping. A rigger or VLM must inspect the wire-bone views before Skin setup.",
+        "mdc_agent",
+        "Generated guides and numeric Biped diagnostics do not prove front/side/top wrapping. The MDC local visual agent must inspect the wire-bone views before Skin setup.",
         "Review front, side and top wire-bone screenshots plus pelvis, hand and foot crops. Approve only when the Biped centerline, limb pivots and foot/toe direction sit inside the visible model volume in all relevant views.",
     )
 
@@ -354,7 +354,7 @@ def semantic_skin_review(
             add_risk(
                 "headtop_may_be_crest_or_ornament",
                 "skin_blocker",
-                "rigging",
+                "mdc_agent",
                 "HeadTop is driven by the highest sparse silhouette area on a character profile that explicitly includes a tall head/crest region.",
                 "Confirm whether the upper silhouette is skull volume or crest/headwear. If it is crest/headwear, keep it as an accessory reference and keep the main Head bone on the skull mass.",
             )
@@ -372,7 +372,7 @@ def semantic_skin_review(
         add_risk(
                 "single_hand_mass_requires_detail_signoff",
                 "skin_blocker",
-                "rigging",
+                "mdc_agent",
                 "The current skeleton collapses each hand into one mass. This is acceptable only if the model has no visible fingers, claws, weapon grips, sleeve flaps or hand accessories that need independent deformation.",
                 "Inspect both hand ends in front/side/top screenshots. Reconfigure the Biped hand/finger structure before Skin if any separated hand features are visible.",
             )
@@ -395,7 +395,7 @@ def semantic_skin_review(
         add_risk(
             "foot_pivots_require_side_top_signoff",
             "skin_blocker",
-            "human",
+            "mdc_agent",
             "Front view alone cannot prove foot pivot depth, toe/front-foot direction or knee bend direction for this deep Q-bird silhouette.",
             "Open side and top screenshots before Skin. Confirm rear-foot, front-foot/toe and knee bend direction match the model's actual pose.",
         )
@@ -414,7 +414,7 @@ def semantic_skin_review(
         add_risk(
             "leg_landmarks_may_be_clothing_occluded",
             "skin_blocker",
-            "human_or_vlm",
+            "mdc_agent",
             "Wide lower-body clothing can hide the true hip/knee/ankle chain; a mechanically fitted Biped may still be following the robe or skirt silhouette instead of the leg anatomy.",
             "Use front, side and top wire-bone views plus foot crops and knee/ankle cross sections. Approve only if hips, knees and ankles follow the under-clothing leg chain and visible boot/foot pivots, not the garment edge.",
         )
@@ -486,7 +486,7 @@ def write_markdown(qc: dict[str, Any], snapshot_path: Path, md_path: Path) -> No
         f"- Detail mode: `{qc['detailMode']}`",
         f"- Decision policy: `{qc['decisionPolicy']}`",
         f"- Score policy: `{qc['scorePolicy']}`",
-        "- Decision use: `diagnostic_only`; use Semantic Skin Review and human visual signoff for Skin handoff.",
+        "- Decision use: `diagnostic_only`; use Semantic Skin Review and MDC visual signoff for Skin handoff.",
         f"- Production ready: `{qc['productionReady']}`",
         f"- Diagnostic issue counts: fails `{qc['failCount']}`, warnings `{qc['warningCount']}`, mirror fails `{qc['mirrorFailCount']}`",
         "",

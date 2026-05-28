@@ -9,10 +9,6 @@ param(
 
     [string]$VisualSignoffJson = "",
 
-    [switch]$SkipVlmReview,
-
-    [string]$VlmReviewModel = "",
-
     [int]$MaxFitIterations = 18,
 
     [string]$OutDir = "",
@@ -29,7 +25,6 @@ $ToolRoot = $AiraConfig.toolRoot
 $BatchScript = Join-Path $ToolRoot "maxscript\batch_stage01_fbx_test.ms"
 $VisualQcScript = Join-Path $ToolRoot "server\visual_qc.py"
 $VisualReviewPackScript = Join-Path $ToolRoot "server\visual_review_pack.py"
-$VlmReviewScript = Join-Path $ToolRoot "server\vlm_multiview_review.py"
 $RigDetailReviewScript = Join-Path $ToolRoot "server\rig_detail_review.py"
 $SkinPrepGateScript = Join-Path $ToolRoot "server\stage01_skin_prep_gate.py"
 $OrganizeOutScript = Join-Path $ToolRoot "server\organize_out_dir.py"
@@ -43,7 +38,7 @@ if (-not (Test-Path -LiteralPath $MaxBatch -PathType Leaf)) {
 }
 
 if ($GuideAlgorithm -ne $AllowedVisualCandidateAlgorithm) {
-    throw "Guide algorithm '$GuideAlgorithm' is disabled. Legacy algorithm scoring is blocked; use '$AllowedVisualCandidateAlgorithm' only as a visual candidate generator, then rely on Semantic Skin Review and human visual signoff."
+    throw "Guide algorithm '$GuideAlgorithm' is disabled. Legacy algorithm scoring is blocked; use '$AllowedVisualCandidateAlgorithm' only as a visual candidate generator, then rely on Semantic Skin Review and MDC visual signoff."
 }
 
 if (-not (Test-Path -LiteralPath $SourceFbx)) {
@@ -352,72 +347,20 @@ if (-not (Test-Path -LiteralPath $OrganizedWireBoneScreenshotDir)) {
 }
 
 $EffectiveVisualSignoffJson = ""
-$GeneratedVlmSignoffJson = ""
-$VlmReviewStatus = "not_requested"
-$VlmReviewMessage = ""
+$VisualReviewStatus = "awaiting_local_signoff"
+$VisualReviewMessage = "Visual evidence pack generated; provide -VisualSignoffJson after MDC local-agent image review."
 
 if (-not [string]::IsNullOrWhiteSpace($VisualSignoffJson)) {
     if (-not (Test-Path -LiteralPath $VisualSignoffJson)) {
         throw "Visual signoff JSON not found: $VisualSignoffJson"
     }
     $EffectiveVisualSignoffJson = (Resolve-Path -LiteralPath $VisualSignoffJson).Path
-    $VlmReviewStatus = "external_signoff_used"
-    $VlmReviewMessage = "Using caller-provided visual signoff JSON."
-}
-elseif ($SkipVlmReview.IsPresent) {
-    $VlmReviewStatus = "skipped"
-    $VlmReviewMessage = "SkipVlmReview was set."
-}
-elseif (-not (Test-Path -LiteralPath $VlmReviewScript)) {
-    $VlmReviewStatus = "skipped"
-    $VlmReviewMessage = "VLM review script is missing."
+    $VisualReviewStatus = "local_signoff_used"
+    $VisualReviewMessage = "Using caller-provided local visual signoff JSON."
 }
 elseif (-not (Test-Path -LiteralPath $OrganizedVisualReviewManifest)) {
-    $VlmReviewStatus = "skipped"
-    $VlmReviewMessage = "Visual review manifest is missing."
-}
-elseif ([string]::IsNullOrWhiteSpace($env:OPENAI_API_KEY)) {
-    $VlmReviewStatus = "skipped"
-    $VlmReviewMessage = "OPENAI_API_KEY is not set."
-}
-else {
-    try {
-        if (-not (Test-Path -LiteralPath $Python)) {
-            $Python = "python"
-        }
-        $VisualReviewDir = Join-Path $RunDir "visual_review"
-        New-Item -ItemType Directory -Force -Path $VisualReviewDir | Out-Null
-        $GeneratedVlmSignoffJson = Join-Path $VisualReviewDir "$SafeAssetName`_semantic_visual_review_vlm.json"
-        $VlmArgs = @(
-            $VlmReviewScript,
-            "--manifest-json", $OrganizedVisualReviewManifest,
-            "--out-json", $GeneratedVlmSignoffJson
-        )
-        if (Test-Path -LiteralPath $OrganizedVisualReviewInput) {
-            $VlmArgs += @("--review-input", $OrganizedVisualReviewInput)
-        }
-        if (Test-Path -LiteralPath $OrganizedVisualReviewSchema) {
-            $VlmArgs += @("--schema-json", $OrganizedVisualReviewSchema)
-        }
-        if (-not [string]::IsNullOrWhiteSpace($VlmReviewModel)) {
-            $VlmArgs += @("--model", $VlmReviewModel)
-        }
-
-        & $Python @VlmArgs | Out-Null
-        if (Test-Path -LiteralPath $GeneratedVlmSignoffJson) {
-            $EffectiveVisualSignoffJson = $GeneratedVlmSignoffJson
-            $VlmReviewStatus = "completed"
-            $VlmReviewMessage = "VLM visual signoff JSON generated."
-        }
-        else {
-            $VlmReviewStatus = "failed"
-            $VlmReviewMessage = "VLM review finished without writing signoff JSON."
-        }
-    }
-    catch {
-        $VlmReviewStatus = "failed"
-        $VlmReviewMessage = $_.Exception.Message
-    }
+    $VisualReviewStatus = "evidence_missing"
+    $VisualReviewMessage = "Visual review manifest is missing; no API fallback is available."
 }
 
 if ((Test-Path -LiteralPath $SkinPrepGateScript) -and (Test-Path -LiteralPath $OrganizedFitQcJson)) {
@@ -506,7 +449,6 @@ $OrganizedVisualReviewManifest = Convert-AiraNumberedLayoutPath $OrganizedVisual
 $OrganizedVisualReviewInput = Convert-AiraNumberedLayoutPath $OrganizedVisualReviewInput
 $OrganizedVisualReviewSchema = Convert-AiraNumberedLayoutPath $OrganizedVisualReviewSchema
 $EffectiveVisualSignoffJson = Convert-AiraNumberedLayoutPath $EffectiveVisualSignoffJson
-$GeneratedVlmSignoffJson = Convert-AiraNumberedLayoutPath $GeneratedVlmSignoffJson
 $OrganizedSkinPrepGateJson = Convert-AiraNumberedLayoutPath $OrganizedSkinPrepGateJson
 $OrganizedSkinPrepGateMarkdown = Convert-AiraNumberedLayoutPath $OrganizedSkinPrepGateMarkdown
 $OrganizedRigAssetQcJson = Convert-AiraNumberedLayoutPath $OrganizedRigAssetQcJson
@@ -542,9 +484,8 @@ $OrganizedRigAssetQcMarkdown = Convert-AiraNumberedLayoutPath $OrganizedRigAsset
     visualReviewInput = $OrganizedVisualReviewInput
     visualReviewSchema = $OrganizedVisualReviewSchema
     visualSignoffJson = $EffectiveVisualSignoffJson
-    vlmReviewJson = $GeneratedVlmSignoffJson
-    vlmReviewStatus = $VlmReviewStatus
-    vlmReviewMessage = $VlmReviewMessage
+    visualReviewStatus = $VisualReviewStatus
+    visualReviewMessage = $VisualReviewMessage
     stage01SkinPrepGateJson = $OrganizedSkinPrepGateJson
     stage01SkinPrepGateMarkdown = $OrganizedSkinPrepGateMarkdown
     rigAssetQcJson = $OrganizedRigAssetQcJson

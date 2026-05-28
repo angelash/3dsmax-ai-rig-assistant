@@ -50,10 +50,6 @@ $LocalConfig = [ordered]@{
         serverName = "3dsmax-ai-rig-assistant"
         configOut = $McpConfigPath
     }
-    vlm = [ordered]@{
-        model = "gpt-4.1"
-        apiKeyEnv = "OPENAI_API_KEY"
-    }
 }
 
 $LocalConfig | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ConfigPath -Encoding UTF8

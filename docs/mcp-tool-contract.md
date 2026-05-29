@@ -180,6 +180,8 @@
   "asset_name": "luxun_model",
   "guide_algorithm": "tutorial_centerline_qbird",
   "visual_signoff_json": "",
+  "mdc_visual_correction_plan_json": "",
+  "mdc_visual_correction_passes": 1,
   "max_fit_iterations": 12
 }
 ```
@@ -187,6 +189,8 @@
 `guide_algorithm` 只允许 `tutorial_centerline_qbird`。旧算法和分数排序推荐已经屏蔽，不能再通过 MCP 作为生产入口。
 
 `visual_signoff_json` 可传入 MDC 本地代理已填好的 `review_schema.json` 兼容签核文件。未传签核时，Stage01 仍会产出证据包，但 Skin gate 会保持阻断；工程不会调用外部视觉 API。
+
+`mdc_visual_correction_plan_json` 可传入上一轮生成的 `*_mdc_visual_correction_plan.json`。Stage01 会先把它转成 MaxScript 可读的受限指令，在创建 Guide 后、创建 Biped 前按单步上限移动对应 Guide；CT 拟合后，声明为 `bipedNode` 的指令还会对 Biped 节点做受限视觉校正并同步 Guide。`mdc_visual_correction_passes` 控制同一批受限指令最多重复小步移动几轮，默认 1。这只是下一轮候选修正，仍需重新截图和 MDC 复看。
 
 `max_fit_iterations` 控制 Biped 机械拟合的证据反馈循环上限。每轮会按 Fit QC 偏差先缩放 Biped 段长再重新定位；收敛记录写入 `fitQcJson.fitRefinement`。
 
@@ -212,6 +216,10 @@
   "visualReviewMessage": "Visual evidence pack generated; provide -VisualSignoffJson after MDC local-agent image review.",
   "mdcVisualCorrectionPlanJson": "",
   "mdcVisualCorrectionPlanMarkdown": "",
+  "mdcVisualCorrectionInputPlanJson": "",
+  "mdcVisualCorrectionPasses": 1,
+  "mdcVisualCorrectionDirectivesTsv": "",
+  "mdcVisualCorrectionDirectivesSummaryJson": "",
   "wireBoneScreenshotDir": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/wire_bone_screenshots",
   "stage01SkinPrepGateJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/data/luxun_model_stage01_skin_prep_gate.json",
   "rigAssetQcJson": "F:/workspace/github/3dsmax-ai-rig-assistant/out/runs/luxun_model__YYYYMMDD_HHMMSS/data/luxun_model_stage01_rig_asset_qc.json"
@@ -225,6 +233,8 @@
 `visualReviewManifest` / `visualReviewInput` / `visualReviewSchema` 指向 run 内的视觉语义证据包。它包含全局证据图、头/手/脚/骨盆局部裁剪和结构化 blocker 审查 schema，不输出质量分。schema 里的必要项包括 `frontWrap`、`sideWrap`、`topWrap`、`legClothingOcclusion`、左右 foot pivot 等；这些不是备注，未通过会阻断 Skin 前置门。
 
 `mdcVisualCorrectionPlanJson` / `mdcVisualCorrectionPlanMarkdown` 在传入 `visual_signoff_json` 后生成。它把 MDC 本地代理看到的 blocker 转成有来源、有目标、有步长限制的 Guide/Biped 修正候选；它不是自动放行，应用后仍必须重新跑 CT、截图证据和 MDC 复看。
+
+`mdcVisualCorrectionInputPlanJson` / `mdcVisualCorrectionDirectivesTsv` 记录本轮实际消费的上一轮修正计划和转换后的 Guide/Biped 指令。MaxScript 只消费 TSV 中的显式目标，并受 `maxSingleStep` 和 `mdcVisualCorrectionPasses` 限制。
 
 `wireBoneScreenshotDir` 指向 3ds Max 技术视图截图目录。这里的 front / side / top PNG 使用线框材质叠加 Biped 骨段和 guide，用来直观看侧面重心、腰部原点、头/帽分离和骨骼粗细。
 

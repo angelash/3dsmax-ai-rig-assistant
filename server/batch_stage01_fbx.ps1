@@ -9,6 +9,10 @@ param(
 
     [string]$VisualSignoffJson = "",
 
+    [string]$MdcVisualCorrectionPlanJson = "",
+
+    [int]$MdcVisualCorrectionPasses = 1,
+
     [int]$MaxFitIterations = 18,
 
     [string]$OutDir = "",
@@ -26,6 +30,7 @@ $BatchScript = Join-Path $ToolRoot "maxscript\batch_stage01_fbx_test.ms"
 $VisualQcScript = Join-Path $ToolRoot "server\visual_qc.py"
 $VisualReviewPackScript = Join-Path $ToolRoot "server\visual_review_pack.py"
 $VisualCorrectionPlanScript = Join-Path $ToolRoot "server\mdc_visual_correction_plan.py"
+$VisualCorrectionDirectivesScript = Join-Path $ToolRoot "server\mdc_visual_correction_directives.py"
 $RigDetailReviewScript = Join-Path $ToolRoot "server\rig_detail_review.py"
 $SkinPrepGateScript = Join-Path $ToolRoot "server\stage01_skin_prep_gate.py"
 $OrganizeOutScript = Join-Path $ToolRoot "server\organize_out_dir.py"
@@ -40,6 +45,10 @@ if (-not (Test-Path -LiteralPath $MaxBatch -PathType Leaf)) {
 
 if ($GuideAlgorithm -ne $AllowedVisualCandidateAlgorithm) {
     throw "Guide algorithm '$GuideAlgorithm' is disabled. Legacy algorithm scoring is blocked; use '$AllowedVisualCandidateAlgorithm' only as a visual candidate generator, then rely on Semantic Skin Review and MDC visual signoff."
+}
+
+if ($MdcVisualCorrectionPasses -lt 1) {
+    $MdcVisualCorrectionPasses = 1
 }
 
 if (-not (Test-Path -LiteralPath $SourceFbx)) {
@@ -88,12 +97,34 @@ function Copy-FbxTextureSidecar {
 $WorkingFbx = Join-Path $OutDir "$SafeAssetName.fbx"
 Copy-Item -LiteralPath $SourceFbx -Destination $WorkingFbx -Force
 $TextureSidecar = Copy-FbxTextureSidecar -SourceFbxPath $SourceFbx -WorkingFbxPath $WorkingFbx
+$EffectiveMdcVisualCorrectionPlanJson = ""
+$VisualCorrectionDirectivesTsv = ""
+$VisualCorrectionDirectivesSummaryJson = ""
+if (-not [string]::IsNullOrWhiteSpace($MdcVisualCorrectionPlanJson)) {
+    if (-not (Test-Path -LiteralPath $MdcVisualCorrectionPlanJson -PathType Leaf)) {
+        throw "MDC visual correction plan JSON not found: $MdcVisualCorrectionPlanJson"
+    }
+    if (-not (Test-Path -LiteralPath $VisualCorrectionDirectivesScript -PathType Leaf)) {
+        throw "MDC visual correction directives script is missing: $VisualCorrectionDirectivesScript"
+    }
+    if (-not (Test-Path -LiteralPath $Python)) {
+        $Python = "python"
+    }
+    $EffectiveMdcVisualCorrectionPlanJson = (Resolve-Path -LiteralPath $MdcVisualCorrectionPlanJson).Path
+    $VisualCorrectionDirectivesTsv = Join-Path $OutDir "$SafeAssetName`_mdc_visual_correction_directives.tsv"
+    $VisualCorrectionDirectivesSummaryJson = Join-Path $OutDir "$SafeAssetName`_mdc_visual_correction_directives.json"
+    & $Python $VisualCorrectionDirectivesScript $EffectiveMdcVisualCorrectionPlanJson `
+        --out-tsv $VisualCorrectionDirectivesTsv `
+        --out-json $VisualCorrectionDirectivesSummaryJson | Out-Null
+}
 
 $oldFbxPath = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_FBX_PATH", "Process")
 $oldAssetName = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_ASSET_NAME", "Process")
 $oldGuideAlgo = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_GUIDE_ALGO", "Process")
 $oldTextureDir = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_TEXTURE_DIR", "Process")
 $oldMaxFitIterations = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_MAX_FIT_ITERATIONS", "Process")
+$oldCorrectionDirectives = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_CORRECTION_DIRECTIVES_TSV", "Process")
+$oldCorrectionPasses = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_CORRECTION_PASSES", "Process")
 $oldOutDir = [Environment]::GetEnvironmentVariable("AIRA_STAGE01_OUT_DIR", "Process")
 
 try {
@@ -102,6 +133,8 @@ try {
     $env:AIRA_STAGE01_GUIDE_ALGO = $GuideAlgorithm
     $env:AIRA_STAGE01_TEXTURE_DIR = $TextureSidecar
     $env:AIRA_STAGE01_MAX_FIT_ITERATIONS = $MaxFitIterations
+    $env:AIRA_STAGE01_CORRECTION_DIRECTIVES_TSV = $VisualCorrectionDirectivesTsv
+    $env:AIRA_STAGE01_CORRECTION_PASSES = $MdcVisualCorrectionPasses
     $env:AIRA_STAGE01_OUT_DIR = $OutDir
 
     & $MaxBatch $BatchScript `
@@ -143,6 +176,20 @@ finally {
     }
     else {
         $env:AIRA_STAGE01_MAX_FIT_ITERATIONS = $oldMaxFitIterations
+    }
+
+    if ($null -eq $oldCorrectionDirectives) {
+        Remove-Item Env:AIRA_STAGE01_CORRECTION_DIRECTIVES_TSV -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:AIRA_STAGE01_CORRECTION_DIRECTIVES_TSV = $oldCorrectionDirectives
+    }
+
+    if ($null -eq $oldCorrectionPasses) {
+        Remove-Item Env:AIRA_STAGE01_CORRECTION_PASSES -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:AIRA_STAGE01_CORRECTION_PASSES = $oldCorrectionPasses
     }
 
     if ($null -eq $oldOutDir) {
@@ -219,7 +266,9 @@ if ($null -ne $OrganizeResult -and $null -ne $OrganizeResult.assetRuns) {
 }
 
 $RunSceneDir = Join-Path $RunDir "scene"
+$RunDataDir = Join-Path $RunDir "data"
 New-Item -ItemType Directory -Force -Path $RunSceneDir | Out-Null
+New-Item -ItemType Directory -Force -Path $RunDataDir | Out-Null
 
 function Move-AiraGeneratedFileToRunScene {
     param(
@@ -231,6 +280,34 @@ function Move-AiraGeneratedFileToRunScene {
     }
 
     $Target = Join-Path $RunSceneDir ([System.IO.Path]::GetFileName($PathValue))
+    $SourceFull = [System.IO.Path]::GetFullPath($PathValue)
+    $TargetFull = [System.IO.Path]::GetFullPath($Target)
+    if ($SourceFull -ne $TargetFull) {
+        Move-Item -LiteralPath $PathValue -Destination $Target -Force
+    }
+    return $Target
+}
+
+function Move-AiraGeneratedFileToRunData {
+    param(
+        [string]$PathValue
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return $PathValue
+    }
+
+    if (-not (Test-Path -LiteralPath $PathValue -PathType Leaf)) {
+        $MiscCandidate = Join-Path (Join-Path $OutDir "misc") ([System.IO.Path]::GetFileName($PathValue))
+        if (Test-Path -LiteralPath $MiscCandidate -PathType Leaf) {
+            $PathValue = $MiscCandidate
+        }
+        else {
+            return $PathValue
+        }
+    }
+
+    $Target = Join-Path $RunDataDir ([System.IO.Path]::GetFileName($PathValue))
     $SourceFull = [System.IO.Path]::GetFullPath($PathValue)
     $TargetFull = [System.IO.Path]::GetFullPath($Target)
     if ($SourceFull -ne $TargetFull) {
@@ -273,6 +350,8 @@ if ((-not (Test-Path -LiteralPath $WorkingFbx -PathType Leaf)) -and (Test-Path -
 }
 $WorkingFbx = Move-AiraGeneratedFileToRunScene $WorkingFbx
 $TextureSidecar = Move-AiraGeneratedDirectoryToRunScene $TextureSidecar
+$VisualCorrectionDirectivesTsv = Move-AiraGeneratedFileToRunData $VisualCorrectionDirectivesTsv
+$VisualCorrectionDirectivesSummaryJson = Move-AiraGeneratedFileToRunData $VisualCorrectionDirectivesSummaryJson
 
 function Resolve-AiraOutputPath {
     param(
@@ -481,6 +560,9 @@ $OrganizedVisualReviewManifest = Convert-AiraNumberedLayoutPath $OrganizedVisual
 $OrganizedVisualReviewInput = Convert-AiraNumberedLayoutPath $OrganizedVisualReviewInput
 $OrganizedVisualReviewSchema = Convert-AiraNumberedLayoutPath $OrganizedVisualReviewSchema
 $EffectiveVisualSignoffJson = Convert-AiraNumberedLayoutPath $EffectiveVisualSignoffJson
+$EffectiveMdcVisualCorrectionPlanJson = Convert-AiraNumberedLayoutPath $EffectiveMdcVisualCorrectionPlanJson
+$VisualCorrectionDirectivesTsv = Convert-AiraNumberedLayoutPath $VisualCorrectionDirectivesTsv
+$VisualCorrectionDirectivesSummaryJson = Convert-AiraNumberedLayoutPath $VisualCorrectionDirectivesSummaryJson
 $OrganizedSkinPrepGateJson = Convert-AiraNumberedLayoutPath $OrganizedSkinPrepGateJson
 $OrganizedSkinPrepGateMarkdown = Convert-AiraNumberedLayoutPath $OrganizedSkinPrepGateMarkdown
 $OrganizedVisualCorrectionPlanJson = Convert-AiraNumberedLayoutPath $OrganizedVisualCorrectionPlanJson
@@ -522,6 +604,10 @@ $OrganizedRigAssetQcMarkdown = Convert-AiraNumberedLayoutPath $OrganizedRigAsset
     visualReviewMessage = $VisualReviewMessage
     mdcVisualCorrectionPlanJson = $OrganizedVisualCorrectionPlanJson
     mdcVisualCorrectionPlanMarkdown = $OrganizedVisualCorrectionPlanMarkdown
+    mdcVisualCorrectionInputPlanJson = $EffectiveMdcVisualCorrectionPlanJson
+    mdcVisualCorrectionPasses = $MdcVisualCorrectionPasses
+    mdcVisualCorrectionDirectivesTsv = $VisualCorrectionDirectivesTsv
+    mdcVisualCorrectionDirectivesSummaryJson = $VisualCorrectionDirectivesSummaryJson
     stage01SkinPrepGateJson = $OrganizedSkinPrepGateJson
     stage01SkinPrepGateMarkdown = $OrganizedSkinPrepGateMarkdown
     rigAssetQcJson = $OrganizedRigAssetQcJson

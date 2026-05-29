@@ -190,6 +190,8 @@ def stage01_rig_fbx_file(
     asset_name: str = "",
     guide_algorithm: str = "tutorial_centerline_qbird",
     visual_signoff_json: str = "",
+    mdc_visual_correction_plan_json: str = "",
+    mdc_visual_correction_passes: int = 1,
     max_fit_iterations: int = 12,
 ) -> dict[str, Any]:
     """Run offline Stage01 guide, Biped creation, local visual evidence, and Skin-prep gate for a local FBX file."""
@@ -204,6 +206,8 @@ def stage01_rig_fbx_file(
             "Legacy guide algorithms and score-ranked recommendations are disabled. "
             "Use tutorial_centerline_qbird only as a visual candidate generator, then rely on Semantic Skin Review and MDC visual signoff."
         )
+    if mdc_visual_correction_passes < 1:
+        raise ValueError("mdc_visual_correction_passes must be >= 1")
 
     safe_asset_name = asset_name or source.stem
     cmd = [
@@ -221,12 +225,19 @@ def stage01_rig_fbx_file(
         guide_algorithm,
         "-MaxFitIterations",
         str(max_fit_iterations),
+        "-MdcVisualCorrectionPasses",
+        str(mdc_visual_correction_passes),
     ]
     if visual_signoff_json:
         signoff = Path(visual_signoff_json)
         if not signoff.exists():
             raise FileNotFoundError(f"Visual signoff JSON not found: {visual_signoff_json}")
         cmd.extend(["-VisualSignoffJson", str(signoff)])
+    if mdc_visual_correction_plan_json:
+        correction_plan = Path(mdc_visual_correction_plan_json)
+        if not correction_plan.exists():
+            raise FileNotFoundError(f"MDC visual correction plan JSON not found: {mdc_visual_correction_plan_json}")
+        cmd.extend(["-MdcVisualCorrectionPlanJson", str(correction_plan)])
 
     completed = subprocess.run(
         cmd,
@@ -271,6 +282,10 @@ def stage01_rig_fbx_file(
         "visualReviewMessage": "Provide visual_signoff_json after MDC local-agent image review.",
         "mdcVisualCorrectionPlanJson": "",
         "mdcVisualCorrectionPlanMarkdown": "",
+        "mdcVisualCorrectionInputPlanJson": mdc_visual_correction_plan_json,
+        "mdcVisualCorrectionPasses": mdc_visual_correction_passes,
+        "mdcVisualCorrectionDirectivesTsv": "",
+        "mdcVisualCorrectionDirectivesSummaryJson": "",
         "wireBoneScreenshotDir": str(out_dir / "runs" / output_name / "wire_bone_screenshots"),
         "rigAssetQcJson": str(out_dir / f"{output_name}_stage01_rig_asset_qc.json"),
         "rigAssetQcMarkdown": str(out_dir / f"{output_name}_stage01_rig_asset_qc.md"),

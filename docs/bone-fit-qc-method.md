@@ -134,6 +134,10 @@ Biped 的肩、肘、胯、膝、踝等节点会受 Character Studio Figure Mode
 
 传入本地签核后，`server/mdc_visual_correction_plan.py` 会把未通过项转换为下一轮修正计划：脚/踝/膝/髋使用本地点云解剖目标，手臂/手团使用 `visual_qc` 的中心线覆盖目标。计划只输出受限候选，不直接放行；每次应用后都必须重新跑 CT、生成证据图并由 MDC 本地代理复看。
 
+把上一轮计划作为 `-MdcVisualCorrectionPlanJson` 输入下一轮 Stage01 时，`server/mdc_visual_correction_directives.py` 会转成 TSV 指令。MaxScript 先按指令移动对应 Guide，且每个 Guide 的移动距离受 `maxSingleStep` 限制；CT 拟合后，声明为 `bipedNode` 的同一批指令还会对 Biped 节点做受限视觉校正并同步 Guide。`-MdcVisualCorrectionPasses` 可让同一批指令做多轮受限小步移动。Biped 随后必须重新出证据图并由 MDC 复看。
+
+Biped 创建时会按最终 Guide 段长做 pre-fit / post-fit 两次段长缩放，再执行节点 fit。这个步骤是为了处理 Q 版短腿角色：如果只移动节点但保持默认 humanoid 腿段长度，Character Studio 会把膝/踝重新拉回不合理位置，视觉修正无法真正生效。
+
 ## 7. 本地视觉轮廓自检
 
 当前已增加第一版视觉自检，但它不是外部视觉大模型。

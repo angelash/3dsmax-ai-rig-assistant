@@ -164,6 +164,10 @@ visual_screenshots/<asset>/*_top.png
 
 传入本地签核后，流程还会生成 `*_mdc_visual_correction_plan.json` / `.md`。这份计划把 MDC 视觉 blocker 转成受限的 Guide/Biped 修正候选，包括目标点、偏移量、单步上限和复检要求；它只是下一轮修正输入，不能跳过 CT、重新截图和 MDC 复看。
 
+下一轮 Stage01 可以把上一轮计划作为 `mdc_visual_correction_plan_json` / `-MdcVisualCorrectionPlanJson` 传入。批处理会生成 `*_mdc_visual_correction_directives.tsv`，MaxScript 在 Guide 创建并镜像后按 `maxSingleStep` 小步移动对应 Guide，再创建和拟合 Biped；CT 拟合后，同一批声明为 `bipedNode` 的指令还会做一轮受限的 Biped 节点视觉校正并同步 Guide。`mdc_visual_correction_passes` / `-MdcVisualCorrectionPasses` 可以让同一批受限指令重复执行多轮，用于把明显偏离的 Guide/Biped 节点分几步拉回目标，而不是一次越界跳动。
+
+Biped 创建阶段还会根据 Guide 段长做 pre-fit / post-fit 缩放。这个不是放行条件，而是让 Q 版短腿角色的 Biped 段长先接近视觉目标，否则 Character Studio 的默认 humanoid 比例会把腿链重新拉长。
+
 Biped 机械拟合不是单次写入。离线流程会按 Fit QC 偏差循环调整：先根据 Guide 段长缩放 Biped，再按教程层级顺序重新定位，直到无 fit failure 或达到 `max_fit_iterations` / `-MaxFitIterations` 上限。未收敛时 Skin gate 会继续阻断。
 
 旧 benchmark 曾写入：

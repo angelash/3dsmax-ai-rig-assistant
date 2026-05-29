@@ -77,6 +77,7 @@ Test-AiraFile "stage01_script" (Join-Path $Config.toolRoot "maxscript\aira_stage
 Test-AiraFile "stage02_script" (Join-Path $Config.toolRoot "maxscript\aira_stage02_skin.ms") "Stage02 MaxScript is missing."
 Test-AiraFile "asset_qc_script" (Join-Path $Config.toolRoot "maxscript\aira_asset_qc.ms") "Asset QC MaxScript is missing."
 Test-AiraFile "visual_correction_plan_script" (Join-Path $Config.toolRoot "server\mdc_visual_correction_plan.py") "MDC visual correction planner is missing."
+Test-AiraFile "visual_correction_directives_script" (Join-Path $Config.toolRoot "server\mdc_visual_correction_directives.py") "MDC visual correction directives converter is missing."
 
 $McpLocalConfig = Join-Path $Config.toolRoot "config\mcp.local.json"
 if (Test-Path -LiteralPath $McpLocalConfig -PathType Leaf) {

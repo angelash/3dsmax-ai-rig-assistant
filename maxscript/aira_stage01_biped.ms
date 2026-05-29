@@ -1081,6 +1081,86 @@ struct AIRAStage01Tool
         count
     ),
 
+    fn applyMdcVisualCorrectionDirectives directivesPath passCount =
+    (
+        if directivesPath == undefined or directivesPath == "" or not (doesFileExist directivesPath) then
+        (
+            log "No MDC visual correction directives found."
+            #(0, 0, directivesPath, 0, passCount)
+        )
+        else
+        (
+            if passCount < 1 do passCount = 1
+            local fp = openFile directivesPath mode:"r"
+            local rows = #()
+            local invalidRows = 0
+            local lineNumber = 0
+            while not eof fp do
+            (
+                local line = readLine fp
+                lineNumber += 1
+                if line != undefined and line != "" do
+                (
+                    local parts = filterString line "\t"
+                    if lineNumber == 1 and parts.count > 0 and parts[1] == "targetName" then
+                    (
+                        invalidRows += 0
+                    )
+                    else if parts.count >= 6 then
+                    (
+                        local actionId = if parts.count >= 7 then parts[7] else parts[1]
+                        local actionKind = if parts.count >= 8 then parts[8] else ""
+                        local rule = if parts.count >= 9 then parts[9] else ""
+                        local targetPos = [parts[3] as float, parts[4] as float, parts[5] as float]
+                        local maxStep = parts[6] as float
+                        if maxStep <= 0.0 do maxStep = guideSize * 0.5
+                        append rows #(parts[1], parts[2], targetPos, maxStep, actionId, actionKind, rule)
+                    )
+                    else
+                    (
+                        invalidRows += 1
+                    )
+                )
+            )
+            close fp
+
+            local movedActions = #()
+            local totalMoves = 0
+            for passIndex = 1 to passCount do
+            (
+                for row in rows do
+                (
+                    local guideName = row[1]
+                    local g = getGuide guideName
+                    if g != undefined do
+                    (
+                        local targetPos = row[3]
+                        local maxStep = row[4]
+                        local actionId = row[5]
+                        local rule = row[7]
+                        local delta = targetPos - g.pos
+                        local d = length delta
+                        if d > 0.0001 do
+                        (
+                            local step = if d > maxStep then maxStep else d
+                            local newPos = g.pos + ((delta / d) * step)
+                            g.pos = newPos
+                            try(setUserProp g "AIRA_MdcVisualCorrectionApplied" "true")catch()
+                            try(setUserProp g "AIRA_MdcVisualCorrectionActionId" actionId)catch()
+                            try(setUserProp g "AIRA_MdcVisualCorrectionRule" rule)catch()
+                            if (findItem movedActions actionId) == 0 do append movedActions actionId
+                            totalMoves += 1
+                        )
+                    )
+                )
+            )
+
+            local skipped = rows.count - movedActions.count + invalidRows
+            log ("Applied " + (movedActions.count as string) + " MDC visual guide correction actions from " + directivesPath + " across " + (passCount as string) + " pass(es), total moves " + (totalMoves as string) + "; skipped " + (skipped as string) + ".")
+            #(movedActions.count, skipped, directivesPath, totalMoves, passCount)
+        )
+    ),
+
     fn getGuidePosition name fallback =
     (
         local g = getGuide name
@@ -2329,8 +2409,161 @@ struct AIRAStage01Tool
                     count += 1
                 )
             )
+
+            local h = defaultHeight
+            for sideName in #("L", "R") do
+            (
+                local ankleGuide = getGuide (sideName + "_Ankle")
+                local toeGuide = getGuide (sideName + "_Toe")
+                local footGuide = getGuide (sideName + "_Foot")
+                local heelGuide = getGuide (sideName + "_Heel")
+                if ankleGuide != undefined and toeGuide != undefined do
+                (
+                    if footGuide != undefined do
+                    (
+                        footGuide.pos = (ankleGuide.pos + toeGuide.pos) / 2.0
+                        count += 1
+                    )
+                    if heelGuide != undefined do
+                    (
+                        local heelZ = if ankleGuide.pos.z < toeGuide.pos.z then ankleGuide.pos.z else toeGuide.pos.z
+                        heelGuide.pos = [ankleGuide.pos.x, ankleGuide.pos.y + ((ankleGuide.pos.y - toeGuide.pos.y) * 0.35), heelZ]
+                        count += 1
+                    )
+                )
+
+                local wristGuide = getGuide (sideName + "_Wrist")
+                local handGuide = getGuide (sideName + "_Hand")
+                local handTipGuide = getGuide (sideName + "_HandTip")
+                if wristGuide != undefined do
+                (
+                    local handDir = if sideName == "L" then 1.0 else -1.0
+                    if handGuide != undefined do
+                    (
+                        handGuide.pos = [wristGuide.pos.x + (handDir * h * 0.025), wristGuide.pos.y, wristGuide.pos.z - (h * 0.020)]
+                        count += 1
+                    )
+                    if handTipGuide != undefined do
+                    (
+                        handTipGuide.pos = [wristGuide.pos.x + (handDir * h * 0.050), wristGuide.pos.y, wristGuide.pos.z - (h * 0.025)]
+                        count += 1
+                    )
+                )
+            )
         )
         count
+    ),
+
+    fn applyMdcVisualCorrectionDirectivesToBiped directivesPath passCount =
+    (
+        if directivesPath == undefined or directivesPath == "" or not (doesFileExist directivesPath) then
+        (
+            log "No MDC visual correction directives found for Biped post-fit correction."
+            #(0, 0, directivesPath, 0, passCount, 0)
+        )
+        else
+        (
+            if passCount < 1 do passCount = 1
+            local bipRoot = findBipedRoot()
+            if bipRoot == undefined then
+            (
+                log "No Biped root found for MDC visual post-fit correction."
+                #(0, 0, directivesPath, 0, passCount, 0)
+            )
+            else
+            (
+                setFigureMode bipRoot true
+                local fp = openFile directivesPath mode:"r"
+                local rows = #()
+                local invalidRows = 0
+                local lineNumber = 0
+                while not eof fp do
+                (
+                    local line = readLine fp
+                    lineNumber += 1
+                    if line != undefined and line != "" do
+                    (
+                        local parts = filterString line "\t"
+                        if lineNumber == 1 and parts.count > 0 and parts[1] == "targetName" then
+                        (
+                            invalidRows += 0
+                        )
+                        else if parts.count >= 6 then
+                        (
+                            local actionId = if parts.count >= 7 then parts[7] else parts[1]
+                            local actionKind = if parts.count >= 8 then parts[8] else ""
+                            local rule = if parts.count >= 9 then parts[9] else ""
+                            local targetPos = [parts[3] as float, parts[4] as float, parts[5] as float]
+                            local maxStep = parts[6] as float
+                            if maxStep <= 0.0 do maxStep = guideSize * 0.5
+                            append rows #(parts[1], parts[2], targetPos, maxStep, actionId, actionKind, rule)
+                        )
+                        else
+                        (
+                            invalidRows += 1
+                        )
+                    )
+                )
+                close fp
+
+                local orderedRows = #()
+                local orderedNames = #("L_Hip", "R_Hip", "L_Ankle", "R_Ankle", "L_Toe", "R_Toe", "L_Knee", "R_Knee")
+                for orderedName in orderedNames do
+                (
+                    for row in rows where row[1] == orderedName do append orderedRows row
+                )
+                for row in rows where (findItem orderedNames row[1]) == 0 do append orderedRows row
+                rows = orderedRows
+
+                local movedActions = #()
+                local totalMoves = 0
+                local eligibleRows = 0
+                for passIndex = 1 to passCount do
+                (
+                    for row in rows do
+                    (
+                        local guideName = row[1]
+                        local targetKind = row[2]
+                        local targetPos = row[3]
+                        local maxStep = row[4]
+                        local actionId = row[5]
+                        local actionKind = row[6]
+                        local rule = row[7]
+                        local shouldApply = (targetKind == "bipedNode") or (actionKind == "biped_node_nudge")
+                        if shouldApply do
+                        (
+                            if passIndex == 1 do eligibleRows += 1
+                            local node = bipedNodeForGuide bipRoot guideName
+                            local currentPos = getBipedNodePosition node
+                            if currentPos != undefined do
+                            (
+                                local delta = targetPos - currentPos
+                                local d = length delta
+                                if d > 0.0001 do
+                                (
+                                    local step = if d > maxStep then maxStep else d
+                                    local newPos = currentPos + ((delta / d) * step)
+                                    if setBipedNodePosition node newPos do
+                                    (
+                                        try(setUserProp node "AIRA_MdcVisualPostFitCorrectionApplied" "true")catch()
+                                        try(setUserProp node "AIRA_MdcVisualPostFitCorrectionActionId" actionId)catch()
+                                        try(setUserProp node "AIRA_MdcVisualPostFitCorrectionRule" rule)catch()
+                                        if (findItem movedActions actionId) == 0 do append movedActions actionId
+                                        totalMoves += 1
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+
+                local syncCount = syncGuidesToBiped bipRoot
+                local skipped = eligibleRows - movedActions.count + invalidRows
+                if skipped < 0 do skipped = 0
+                log ("Applied " + (movedActions.count as string) + " MDC visual post-fit Biped correction actions from " + directivesPath + " across " + (passCount as string) + " pass(es), total moves " + (totalMoves as string) + "; skipped " + (skipped as string) + "; synced guides " + (syncCount as string) + ".")
+                #(movedActions.count, skipped, directivesPath, totalMoves, passCount, syncCount)
+            )
+        )
     ),
 
     fn setBipedNodeToGuide bipRoot limbName linkIndex guideName =
@@ -2675,9 +2908,14 @@ struct AIRAStage01Tool
         try(bipRoot.name = bipedName)catch()
         try(setUserProp bipRoot "AIRA_BodyType" bodyType)catch()
         try(setUserProp bipRoot "AIRA_Fingers" (fingers as string))catch()
+        local preFitScaleCount = scaleBipedSegmentsToGuides bipRoot
         AIRA_Stage01.fitBipedToGuides bipRoot
+        local postFitScaleCount = scaleBipedSegmentsToGuides bipRoot
+        AIRA_Stage01.fitBipedToGuides bipRoot
+        try(setUserProp bipRoot "AIRA_BipedGuidePreFitScaleCount" (preFitScaleCount as string))catch()
+        try(setUserProp bipRoot "AIRA_BipedGuidePostFitScaleCount" (postFitScaleCount as string))catch()
         select bipRoot
-        log ("Created Biped with height " + (h as string) + ", bodyType=" + bodyType + ", fingers=" + (fingers as string) + ".")
+        log ("Created Biped with height " + (h as string) + ", bodyType=" + bodyType + ", fingers=" + (fingers as string) + ", guideScale=" + (preFitScaleCount as string) + "+" + (postFitScaleCount as string) + ".")
         bipRoot
     ),
 

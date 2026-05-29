@@ -463,6 +463,9 @@ fn main =
     local assetName = getEnv "AIRA_STAGE01_ASSET_NAME" (getFilenameFile fbxPath)
     local guideAlgorithm = getEnv "AIRA_STAGE01_GUIDE_ALGO" "tutorial_centerline_qbird"
     local maxFitIterations = (getEnv "AIRA_STAGE01_MAX_FIT_ITERATIONS" "18") as integer
+    local visualCorrectionDirectives = getEnv "AIRA_STAGE01_CORRECTION_DIRECTIVES_TSV" ""
+    local visualCorrectionPasses = (getEnv "AIRA_STAGE01_CORRECTION_PASSES" "1") as integer
+    if visualCorrectionPasses < 1 do visualCorrectionPasses = 1
     local toolPath = joinPath (joinPath toolRoot "maxscript") "aira_stage01_biped.ms"
     local assetQcPath = joinPath (joinPath toolRoot "maxscript") "aira_asset_qc.ms"
     local reportPath = outDir + @"\" + assetName + @"_stage01_batch_summary.md"
@@ -477,6 +480,8 @@ fn main =
     writeLine fp ("- FBX: `" + fbxPath + "`")
     writeLine fp ("- Guide algorithm: `" + guideAlgorithm + "`")
     writeLine fp ("- Max CT refinement iterations: `" + (maxFitIterations as string) + "`")
+    writeLine fp ("- MDC visual correction directives: `" + visualCorrectionDirectives + "`")
+    writeLine fp ("- MDC visual correction passes: `" + (visualCorrectionPasses as string) + "`")
     writeLine fp ("- Started: `" + (localTime as string) + "`")
 
     if not (doesFileExist fbxPath) then
@@ -525,8 +530,10 @@ fn main =
         local bodyProfile = AIRA_Stage01.writeBodyProfileReport assetName
         local guideCount = AIRA_Stage01.createGuidesFromSelection()
         local mirrorCount = AIRA_Stage01.mirrorLeftGuidesToRight()
+        local visualCorrectionResult = AIRA_Stage01.applyMdcVisualCorrectionDirectives visualCorrectionDirectives visualCorrectionPasses
         local bip = AIRA_Stage01.createBipedFromGuides()
         local refineResult = AIRA_Stage01.refineBipedToGuides maxFitIterations
+        local visualCorrectionBipedResult = AIRA_Stage01.applyMdcVisualCorrectionDirectivesToBiped visualCorrectionDirectives visualCorrectionPasses
         local bipedName = if bip != undefined then bip.name else ""
 
         saveMaxFile scenePath
@@ -549,6 +556,15 @@ fn main =
         writeLine fp ("- Body profile type: `" + bodyProfile[3] + "`")
         writeLine fp ("- Guides created: `" + (guideCount as string) + "`")
         writeLine fp ("- Guide pairs mirrored: `" + (mirrorCount as string) + "`")
+        writeLine fp ("- MDC visual guide corrections applied: `" + (visualCorrectionResult[1] as string) + "`")
+        writeLine fp ("- MDC visual guide corrections skipped: `" + (visualCorrectionResult[2] as string) + "`")
+        writeLine fp ("- MDC visual guide correction total moves: `" + (visualCorrectionResult[4] as string) + "`")
+        writeLine fp ("- MDC visual guide correction passes: `" + (visualCorrectionResult[5] as string) + "`")
+        writeLine fp ("- MDC visual post-fit Biped corrections applied: `" + (visualCorrectionBipedResult[1] as string) + "`")
+        writeLine fp ("- MDC visual post-fit Biped corrections skipped: `" + (visualCorrectionBipedResult[2] as string) + "`")
+        writeLine fp ("- MDC visual post-fit Biped correction total moves: `" + (visualCorrectionBipedResult[4] as string) + "`")
+        writeLine fp ("- MDC visual post-fit Biped correction passes: `" + (visualCorrectionBipedResult[5] as string) + "`")
+        writeLine fp ("- MDC visual post-fit Biped guide sync count: `" + (visualCorrectionBipedResult[6] as string) + "`")
         writeLine fp ("- Biped root: `" + bipedName + "`")
         writeLine fp ("- CT refinement converged: `" + (refineResult[1] as string) + "`")
         writeLine fp ("- CT refinement iterations: `" + (refineResult[2] as string) + "`")
